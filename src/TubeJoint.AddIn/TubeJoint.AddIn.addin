@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Addin Type="Standard">
+  <ClassId>{7F44DC6F-3A5F-4AD4-A7F0-27D513769A58}</ClassId>
+  <ClientId>{7F44DC6F-3A5F-4AD4-A7F0-27D513769A58}</ClientId>
+  <DisplayName>Шип-паз для труб</DisplayName>
+  <Description>Параметрические шип-паз соединения труб в сборке.</Description>
+  <Assembly>TubeJoint.AddIn.dll</Assembly>
+  <OSType>Win64</OSType>
+  <LoadAutomatically>1</LoadAutomatically>
+  <LoadBehavior>2</LoadBehavior>
+  <UserUnloadable>1</UserUnloadable>
+  <Hidden>0</Hidden>
+  <SupportedSoftwareVersionGreaterThan>30..</SupportedSoftwareVersionGreaterThan>
+  <DataVersion>3</DataVersion>
+  <UserInterfaceVersion>3</UserInterfaceVersion>
+</Addin>

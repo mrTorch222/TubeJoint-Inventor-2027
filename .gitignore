@@ -1,0 +1,32 @@
+# Build output
+**/bin/
+**/obj/
+artifacts/
+publish/
+
+# Visual Studio / Rider / VS Code local state
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.rsuser
+
+# Logs and temporary files
+*.log
+IGES_EXPORT_LOG.txt
+*.tmp
+*.bak
+~$*
+
+# Generated CAD exchange files
+*.igs
+*.iges
+*.step
+*.stp
+*.sat
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store

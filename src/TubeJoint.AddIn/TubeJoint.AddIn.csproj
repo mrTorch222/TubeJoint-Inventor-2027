@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platforms>AnyCPU</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputType>Library</OutputType>
+    <AssemblyName>TubeJoint.AddIn</AssemblyName>
+    <RootNamespace>TubeJoint.AddIn</RootNamespace>
+    <InventorInstallDir Condition="'$(InventorInstallDir)' == ''">C:\Program Files\Autodesk\Inventor 2027</InventorInstallDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Autodesk.Inventor.Interop">
+      <HintPath>$(InventorInstallDir)\Bin\Public Assemblies\Autodesk.Inventor.Interop.dll</HintPath>
+      <Private>false</Private>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+    </Reference>
+    <EmbeddedResource Include="..\..\Icon.png" LogicalName="TubeJoint.AddIn.Resources.Icon.png" />
+  </ItemGroup>
+
+  <Target Name="VerifyInventorInterop" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(InventorInstallDir)\Bin\Public Assemblies\Autodesk.Inventor.Interop.dll')"
+           Text="Autodesk.Inventor.Interop.dll was not found. Set InventorInstallDir to the Autodesk Inventor 2027 installation folder." />
+  </Target>
+</Project>

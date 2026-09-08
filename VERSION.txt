@@ -1,0 +1,48 @@
+TubeJoint for Autodesk Inventor 2027
+Iteration: 9
+Package: iteration9-v31
+Template file: StandardSideTenonSlot_v6.ipt (preserved in place)
+Template schema: 10, migrated by adding missing TJ_* parameters only
+Ribbon tab: Design (id_TabDesign)
+Window: floating Inventor DockableWindow, 620 x 790; no forced docking
+Sizing workflow: Standard / Compact / Reinforced / Custom presets
+Auto sizing: retained but disabled by default
+Slot thickness: measured automatically from the male tube; no redundant UI row
+Profile mode: solved tenon/slot sketches copied 1:1; no external X/Y/root scaling
+Tenon contract: TJ_TenonLength / TJ_TenonAcrossWidth / TJ_TenonThickness
+Reliefs: driven only by TJ_TenonRelief/TJ_SlotRelief inside the template
+Preview: temporarily applies parameters, resamples all three solved IPT sketches, then restores the template
+Curve support: typed GetPointAtParam sampling for Control Vertex Spline, ellipses and polylines
+Final curves: the complete mixed contour is copied natively through Inventor and transformed as one temporary sketch block
+Spline topology: CV and interpolation splines retain their native type and shared connections to lines/arcs
+Native dependencies: CopyEntitiesTo control/fit entities remain grouped with their owning splines during placement
+Male result silhouette: the profile bounding window is cleared first, then the exact TJ_MALE_PROFILE is joined back
+Root attachment: a fixed 0.2 mm negative-X band is retained so the replacement profile intersects the original tube
+Slot profiles: A/B use separate sketches and Cut features inside the same assembly transaction
+Closed-chain fallback: a single connected closed path is accepted when AddForSolid rejects the same native contour
+Topology repair: geometrically coincident neighboring spline/line/arc endpoints are merged as shared SketchPoints
+Profile diagnostics: curve counts/types, failed chain seeds, broken joint index and geometric gap are reported
+Creation diagnostics: named stages for template parameters, each tenon, slot/vent profile, Cut and document updates
+Tenon extrusion: zero anchor-to-slot vector skips normalization and safely tries both Join directions
+Mixed contours: lines/arcs use shared SketchPoints; oriented spline segments use exact fixed NURBS endpoints
+Profile fallback: connected sketch curves are used when Inventor rejects source Profiles.AddForSolid
+Spline endpoints: native contour copy preserves Inventor topology; service SketchPoint entities are ignored
+Paired placement: A/B anchors solve wall plane, female plane and shared longitudinal station simultaneously
+Vent creation: profile prepared before slot Cut; separate TJ_VENT_CUT uses one-sided female-wall depth
+Paired roots: tenon A/B roots share one tube-axis station; slot intersections remain on the female plane
+Primary wall selection: orientation by area, then outermost plane; never pair an inner wall with an outer wall
+Vent size: explicit uniform 10-500 percent control; persisted in repository schema 12
+Template guide: PARAMETRIC_TENON_SLOT_GUIDE_RU.md
+Joint placement: native one-axis triad starts by default; no separate enable button
+Hole: planar triad starts at the shifted joint and returns to the main triad after drag
+Wall selection model: real opposite A/B and C/D discovery with 90-degree switching
+Placement model: common joint and separate hole X/Y offsets persisted for native triads
+Paired placement: opposite roots use the analytical tube-axis/female-plane station
+Paired root bridge: opposite sides use the same maximum measured Trim/Notch gap and overlap
+Angled joints: selected female-face-normal insertion direction retained
+Repository schema: 12
+UI: Icon.png with five inline editors; no spinner rectangles; compact hole controls
+Cancel: DockableWindow X stops triads/timer, deletes stale preview graphics and resets the command
+Undo: failed global transactions are always aborted; template working values are restored without save
+Auto slot thickness: measured male-wall value bypasses manual standard-step validation
+Partial preview: one invalid template sketch no longer hides every valid preview body
