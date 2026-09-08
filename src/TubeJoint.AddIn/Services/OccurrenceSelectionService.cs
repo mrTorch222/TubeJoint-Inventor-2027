@@ -8,8 +8,13 @@ internal sealed class OccurrenceSelectionService
 {
     private const double Tolerance = 1e-7;
     private readonly Inventor.Application _application;
+    private readonly TubeAnalyzerSelector _tubeAnalyzers;
 
-    public OccurrenceSelectionService(Inventor.Application application) => _application = application;
+    public OccurrenceSelectionService(Inventor.Application application)
+    {
+        _application = application;
+        _tubeAnalyzers = new TubeAnalyzerSelector(application);
+    }
 
     public JointPairSelection PickPair()
     {
@@ -31,10 +36,11 @@ internal sealed class OccurrenceSelectionService
         EnsureWritable(maleDocument, "деталь с шипом");
         EnsureWritable(femaleDocument, "деталь с пазом");
 
-        var axis = FindTubeAxis(maleOccurrence);
+        var maleTube = _tubeAnalyzers.Analyze(maleOccurrence);
+        var axis = maleTube.AxisAssembly.Copy();
         var femalePlane = RequirePlane(female.ProxyFace);
         var femaleNormal = femalePlane.Normal.AsVector();
-        var center = CenterOf(maleOccurrence.RangeBox);
+        var center = maleTube.CenterAssembly;
         var denominator = Dot(axis, femaleNormal);
         if (Math.Abs(denominator) < 0.05)
             throw new InvalidOperationException("Ось трубы почти параллельна выбранной грани паза.");
@@ -50,10 +56,27 @@ internal sealed class OccurrenceSelectionService
         // to a trimmed face boundary and was the source of slot/tenon offsets
         // when the selected face came from Frame Generator Notch or Trim.
         var jointPoint = PointAlong(center, axis, distance);
-        var maleSide = FindMaleSideFace(maleOccurrence, axis, jointPoint);
-        var primary = BuildPair(
-            maleOccurrence, female, axis, femalePlane, femaleNormal,
-            jointPoint, maleSide, JointWallPair.AB);
+        JointPairSelection primary;
+        FaceProxy maleSide;
+        try
+        {
+            maleSide = FindMaleSideFace(maleOccurrence, axis, jointPoint);
+            primary = BuildPair(
+                maleOccurrence, female, axis, femalePlane, femaleNormal,
+                jointPoint, maleSide, JointWallPair.AB, maleTube);
+        }
+        catch (Exception exception) when (
+            maleTube.Source == TubeMemberSource.GenericSolid &&
+            exception is not OperationCanceledException)
+        {
+            var confidence = double.IsPositiveInfinity(maleTube.AxisConfidence)
+                ? "однозначно"
+                : maleTube.AxisConfidence.ToString("0.##");
+            throw new InvalidOperationException(
+                $"Обычная solid-деталь распознана, но её не удалось разобрать как прямую полую трубу. " +
+                $"Ось: {maleTube.AxisMethod}, уверенность: {confidence}. {exception.Message}",
+                exception);
+        }
 
         // Discover the second pair now, while topology references are live. A real
         // 90-degree switch must replace the selected wall faces and all derived axes;
@@ -63,7 +86,7 @@ internal sealed class OccurrenceSelectionService
             var rotatedSide = FindOrthogonalMaleSideFace(maleOccurrence, axis, maleSide, center);
             var rotated = BuildPair(
                 maleOccurrence, female, axis, femalePlane, femaleNormal,
-                jointPoint, rotatedSide, JointWallPair.CD);
+                jointPoint, rotatedSide, JointWallPair.CD, maleTube);
             primary.RotatedPair = rotated;
             rotated.RotatedPair = primary;
         }
@@ -84,7 +107,8 @@ internal sealed class OccurrenceSelectionService
         Vector femaleNormal,
         Point analyticalJointPoint,
         FaceProxy maleSide,
-        JointWallPair wallPair)
+        JointWallPair wallPair,
+        TubeMemberAnalysis maleTube)
     {
         var oppositeMaleSide = FindOppositeMaleSideFace(maleOccurrence, axis, maleSide);
         var sideNormal = Unit(RequirePlane(maleSide).Normal.AsVector());
@@ -134,6 +158,9 @@ internal sealed class OccurrenceSelectionService
 
         return new JointPairSelection
         {
+            MaleTubeSource = maleTube.Source,
+            MaleAxisMethod = maleTube.AxisMethod,
+            MaleAxisConfidence = maleTube.AxisConfidence,
             WallPair = wallPair,
             Male = new JointFaceSelection(maleOccurrence, maleSide),
             MaleOpposite = new JointFaceSelection(maleOccurrence, oppositeMaleSide),
@@ -180,30 +207,6 @@ internal sealed class OccurrenceSelectionService
         if (selected is not FaceProxy face)
             throw new OperationCanceledException("Выбор отменён.");
         return new JointFaceSelection(face.ContainingOccurrence, face);
-    }
-
-    private static Vector FindTubeAxis(ComponentOccurrence occurrence)
-    {
-        LineSegment? longest = null;
-        var longestLength = 0.0;
-        foreach (SurfaceBody body in occurrence.SurfaceBodies)
-        foreach (Edge edge in body.Edges)
-        {
-            if (edge.Geometry is not LineSegment line)
-                continue;
-            var length = line.StartPoint.DistanceTo(line.EndPoint);
-            if (length > longestLength)
-            {
-                longest = line;
-                longestLength = length;
-            }
-        }
-
-        if (longest is null)
-            throw new InvalidOperationException("Не удалось определить продольную ось трубы.");
-        var axis = longest.StartPoint.VectorTo(longest.EndPoint);
-        axis.Normalize();
-        return axis;
     }
 
     private static FaceProxy FindMaleSideFace(ComponentOccurrence occurrence, Vector axis, Point jointPoint)
@@ -359,7 +362,7 @@ internal sealed class OccurrenceSelectionService
         {
             throw new InvalidOperationException(
                 $"Не удалось автоматически определить толщину стенки трубы '{occurrence.Name}'. " +
-                "Для прототипа нужна полая труба с параллельными внутренней и наружной гранями.");
+                "Нужна полая труба с параллельными внутренней и наружной гранями.");
         }
 
         return minimum * 10.0; // Inventor database length unit is centimeter.

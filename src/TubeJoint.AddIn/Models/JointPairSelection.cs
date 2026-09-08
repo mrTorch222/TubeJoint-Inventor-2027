@@ -5,6 +5,9 @@ namespace TubeJoint.AddIn.Models;
 
 internal sealed class JointPairSelection
 {
+    public TubeMemberSource MaleTubeSource { get; init; } = TubeMemberSource.GenericSolid;
+    public string MaleAxisMethod { get; init; } = string.Empty;
+    public double MaleAxisConfidence { get; init; }
     public JointWallPair WallPair { get; init; } = JointWallPair.AB;
     public JointPairSelection? RotatedPair { get; set; }
     public required JointFaceSelection Male { get; init; }
