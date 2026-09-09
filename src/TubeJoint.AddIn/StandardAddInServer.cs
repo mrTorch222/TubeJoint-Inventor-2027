@@ -10,15 +10,18 @@ public sealed class StandardAddInServer : ApplicationAddInServer
 {
     public const string ClientId = "{7F44DC6F-3A5F-4AD4-A7F0-27D513769A58}";
     private const string PanelId = "TubeJoint.DesignPanel.V2";
+    private const string PartPanelId = "TubeJoint.PartPanel.V1";
     private Inventor.Application? _application;
     private ButtonDefinition? _createButton;
     private ButtonDefinition? _templateButton;
     private ButtonDefinition? _checkButton;
     private ButtonDefinition? _deleteButton;
+    private ButtonDefinition? _recognizeTubeButton;
     private CreateTubeJointCommand? _createCommand;
     private OpenJointTemplateCommand? _templateCommand;
     private UpdateTubeJointsCommand? _checkCommand;
     private DeleteAllTubeJointsCommand? _deleteCommand;
+    private RecognizeTubeCommand? _recognizeTubeCommand;
 
     public object? Automation => null;
 
@@ -29,6 +32,7 @@ public sealed class StandardAddInServer : ApplicationAddInServer
         _templateCommand = new OpenJointTemplateCommand(_application);
         _checkCommand = new UpdateTubeJointsCommand(_application);
         _deleteCommand = new DeleteAllTubeJointsCommand(_application);
+        _recognizeTubeCommand = new RecognizeTubeCommand(_application);
 
         _createButton = GetOrCreateButton(
             "Новое соединение", "TubeJoint.Create.V2",
@@ -50,11 +54,17 @@ public sealed class StandardAddInServer : ApplicationAddInServer
             "Удалить из текущей сборки все шипы и пазы, созданные TubeJoint",
             new[] { "AppDeleteCmd", "DeleteCmd" },
             new[] { "delete", "удалить" });
+        _recognizeTubeButton = GetOrCreateButton(
+            "Подготовить трубы", "TubeJoint.RecognizeTube.V1",
+            "Распознать все трубы, заполнить iProperties, направить вдоль Z и при желании переименовать IPT",
+            new[] { "PartMeasureCmd", "AppMeasureCmd" },
+            new[] { "measure", "измерить", "properties", "свойства" });
 
         _createButton.OnExecute += CreateButtonOnExecute;
         _templateButton.OnExecute += TemplateButtonOnExecute;
         _checkButton.OnExecute += CheckButtonOnExecute;
         _deleteButton.OnExecute += DeleteButtonOnExecute;
+        _recognizeTubeButton.OnExecute += RecognizeTubeButtonOnExecute;
         BuildRibbon();
     }
 
@@ -64,15 +74,18 @@ public sealed class StandardAddInServer : ApplicationAddInServer
         if (_templateButton is not null) _templateButton.OnExecute -= TemplateButtonOnExecute;
         if (_checkButton is not null) _checkButton.OnExecute -= CheckButtonOnExecute;
         if (_deleteButton is not null) _deleteButton.OnExecute -= DeleteButtonOnExecute;
+        if (_recognizeTubeButton is not null) _recognizeTubeButton.OnExecute -= RecognizeTubeButtonOnExecute;
         _createCommand?.Dispose();
         _createButton = null;
         _templateButton = null;
         _checkButton = null;
         _deleteButton = null;
+        _recognizeTubeButton = null;
         _createCommand = null;
         _templateCommand = null;
         _checkCommand = null;
         _deleteCommand = null;
+        _recognizeTubeCommand = null;
         _application = null;
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -83,7 +96,7 @@ public sealed class StandardAddInServer : ApplicationAddInServer
     private void BuildRibbon()
     {
         if (_application is null || _createButton is null || _templateButton is null ||
-            _checkButton is null || _deleteButton is null)
+            _checkButton is null || _deleteButton is null || _recognizeTubeButton is null)
             return;
         var ribbon = _application.UserInterfaceManager.Ribbons["Assembly"];
 
@@ -100,7 +113,25 @@ public sealed class StandardAddInServer : ApplicationAddInServer
         EnsureButton(panel, _createButton, true);
         EnsureButton(panel, _templateButton, false);
         EnsureButton(panel, _checkButton, false);
+        EnsureButton(panel, _recognizeTubeButton, false);
         EnsureButton(panel, _deleteButton, false);
+
+        // The recognition command is also useful when an IPT is opened directly.
+        // Keep joint-creation commands assembly-only, but expose normalization on Model.
+        try
+        {
+            var partRibbon = _application.UserInterfaceManager.Ribbons["Part"];
+            var model = partRibbon.RibbonTabs["id_TabModel"];
+            RibbonPanel partPanel;
+            try { partPanel = model.RibbonPanels[PartPanelId]; }
+            catch { partPanel = model.RibbonPanels.Add("Подготовка труб", PartPanelId, ClientId, "", false); }
+            EnsureButton(partPanel, _recognizeTubeButton, true);
+        }
+        catch
+        {
+            // Some Inventor editions do not expose the Part ribbon during add-in
+            // activation. The assembly command remains available in that case.
+        }
     }
 
     private ButtonDefinition GetOrCreateButton(
@@ -186,4 +217,5 @@ public sealed class StandardAddInServer : ApplicationAddInServer
     private void TemplateButtonOnExecute(NameValueMap context) => _templateCommand?.Execute();
     private void CheckButtonOnExecute(NameValueMap context) => _checkCommand?.Execute();
     private void DeleteButtonOnExecute(NameValueMap context) => _deleteCommand?.Execute();
+    private void RecognizeTubeButtonOnExecute(NameValueMap context) => _recognizeTubeCommand?.Execute();
 }

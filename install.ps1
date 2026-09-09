@@ -19,5 +19,5 @@ Copy-Item (Join-Path $projectRoot "src\TubeJoint.AddIn\TubeJoint.AddIn.addin") $
 Copy-Item (Join-Path $projectRoot "VERSION.txt") $installDir -Force
 
 Write-Host "Installed to $installDir"
-Write-Host "Package: iteration9-v31"
+Write-Host "Package: iteration10-tube-recognition-v5"
 Write-Host "Restart Autodesk Inventor 2027."
