@@ -6,13 +6,14 @@ namespace TubeJoint.AddIn.Services;
 
 internal sealed class FrameTrimService
 {
+    private const string UserPropertiesId = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}";
     private readonly Inventor.Application _application;
     public FrameTrimService(Inventor.Application application) => _application = application;
 
     public bool CanContinueOrLaunchTrim(AssemblyDocument assembly, JointPairSelection selection)
     {
         var document = OccurrenceSelectionService.GetPartDocument(selection.Male.Occurrence);
-        if (!FrameGeneratorTubeAnalyzer.IsFrameMember(document) || HasEndTreatment(document))
+        if (!IsFrameMember(document) || HasEndTreatment(document))
             return true;
 
         var command = FindTrimCommand();
@@ -37,6 +38,8 @@ internal sealed class FrameTrimService
         return false;
     }
 
+    private static bool IsFrameMember(PartDocument doc) =>
+        HasProperty(doc, "G_L") || HasProperty(doc, "G_W") || HasProperty(doc, "G_H");
     private static bool HasEndTreatment(PartDocument doc)
     {
         // Frame Generator keeps the Trim-Extend node at assembly level, while the
@@ -58,6 +61,16 @@ internal sealed class FrameTrimService
                 property.Name.StartsWith("CUTDETAIL", StringComparison.OrdinalIgnoreCase))
                 return true;
         return false;
+    }
+    private static bool HasProperty(PartDocument doc, string name)
+    {
+        var set = UserProperties(doc);
+        if (set is null) return false;
+        try { _ = set[name]; return true; } catch { return false; }
+    }
+    private static PropertySet? UserProperties(PartDocument doc)
+    {
+        try { return doc.PropertySets[UserPropertiesId]; } catch { return null; }
     }
     private ButtonDefinition? FindTrimCommand()
     {

@@ -1,5 +1,6 @@
 using Inventor;
 using TubeJoint.AddIn.Models;
+using TubeJoint.AddIn.TubeAnalysis;
 using Point = Inventor.Point;
 
 namespace TubeJoint.AddIn.Services;
@@ -8,12 +9,14 @@ internal sealed class OccurrenceSelectionService
 {
     private const double Tolerance = 1e-7;
     private readonly Inventor.Application _application;
-    private readonly TubeAnalyzerSelector _tubeAnalyzers;
+    private readonly ITubeAnalyzer _tubeAnalyzer;
 
-    public OccurrenceSelectionService(Inventor.Application application)
+    public OccurrenceSelectionService(
+        Inventor.Application application,
+        ITubeAnalyzer? tubeAnalyzer = null)
     {
         _application = application;
-        _tubeAnalyzers = new TubeAnalyzerSelector(application);
+        _tubeAnalyzer = tubeAnalyzer ?? new CachedTubeAnalyzer(new GenericSolidTubeAnalyzer());
     }
 
     public JointPairSelection PickPair()
@@ -36,11 +39,21 @@ internal sealed class OccurrenceSelectionService
         EnsureWritable(maleDocument, "деталь с шипом");
         EnsureWritable(femaleDocument, "деталь с пазом");
 
-        var maleTube = _tubeAnalyzers.Analyze(maleOccurrence);
-        var axis = maleTube.AxisAssembly.Copy();
+        TubeAnalysisResult maleTube;
+        try { maleTube = _tubeAnalyzer.Analyze(maleDocument); }
+        catch (TubeAnalysisException exception)
+        {
+            throw new InvalidOperationException(
+                $"Не удалось распознать трубу '{maleOccurrence.Name}' " +
+                $"({exception.Failure}): {exception.Message}", exception);
+        }
+
+        var axis = ToAssemblyVector(maleTube.LengthAxis, maleOccurrence);
         var femalePlane = RequirePlane(female.ProxyFace);
         var femaleNormal = femalePlane.Normal.AsVector();
-        var center = maleTube.CenterAssembly;
+        var center = ToAssemblyPoint(maleTube.CenterCm, maleOccurrence);
+        var femaleWall = TryGetAnalyzedWallThickness(femaleDocument) ??
+                         MeasureWallThicknessMm(female.Occurrence, female.ProxyFace);
         var denominator = Dot(axis, femaleNormal);
         if (Math.Abs(denominator) < 0.05)
             throw new InvalidOperationException("Ось трубы почти параллельна выбранной грани паза.");
@@ -63,18 +76,14 @@ internal sealed class OccurrenceSelectionService
             maleSide = FindMaleSideFace(maleOccurrence, axis, jointPoint);
             primary = BuildPair(
                 maleOccurrence, female, axis, femalePlane, femaleNormal,
-                jointPoint, maleSide, JointWallPair.AB, maleTube);
+                jointPoint, maleSide, JointWallPair.AB,
+                maleTube.ExactWallThicknessMm, femaleWall);
         }
-        catch (Exception exception) when (
-            maleTube.Source == TubeMemberSource.GenericSolid &&
-            exception is not OperationCanceledException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            var confidence = double.IsPositiveInfinity(maleTube.AxisConfidence)
-                ? "однозначно"
-                : maleTube.AxisConfidence.ToString("0.##");
             throw new InvalidOperationException(
-                $"Обычная solid-деталь распознана, но её не удалось разобрать как прямую полую трубу. " +
-                $"Ось: {maleTube.AxisMethod}, уверенность: {confidence}. {exception.Message}",
+                $"Труба распознана как {maleTube.SectionKind}, но не удалось определить стенки " +
+                $"для шипа. Уверенность оси: {maleTube.AxisConfidence:0.##}. {exception.Message}",
                 exception);
         }
 
@@ -86,7 +95,8 @@ internal sealed class OccurrenceSelectionService
             var rotatedSide = FindOrthogonalMaleSideFace(maleOccurrence, axis, maleSide, center);
             var rotated = BuildPair(
                 maleOccurrence, female, axis, femalePlane, femaleNormal,
-                jointPoint, rotatedSide, JointWallPair.CD, maleTube);
+                jointPoint, rotatedSide, JointWallPair.CD,
+                maleTube.ExactWallThicknessMm, femaleWall);
             primary.RotatedPair = rotated;
             rotated.RotatedPair = primary;
         }
@@ -108,7 +118,8 @@ internal sealed class OccurrenceSelectionService
         Point analyticalJointPoint,
         FaceProxy maleSide,
         JointWallPair wallPair,
-        TubeMemberAnalysis maleTube)
+        double maleWall,
+        double femaleWall)
     {
         var oppositeMaleSide = FindOppositeMaleSideFace(maleOccurrence, axis, maleSide);
         var sideNormal = Unit(RequirePlane(maleSide).Normal.AsVector());
@@ -141,8 +152,6 @@ internal sealed class OccurrenceSelectionService
         if (slotAcrossAtoB.Length < Tolerance)
             throw new InvalidOperationException("Не удалось определить расстояние между пазами A и B.");
         slotAcrossAtoB.Normalize();
-        var maleWall = MeasureWallThicknessMm(maleOccurrence, maleSide);
-        var femaleWall = MeasureWallThicknessMm(female.Occurrence, female.ProxyFace);
         var sectionY = Cross(sideNormal, axis);
         sectionY.Normalize();
         var profileSpan = MeasureSpanMm(maleOccurrence, sectionY);
@@ -158,9 +167,6 @@ internal sealed class OccurrenceSelectionService
 
         return new JointPairSelection
         {
-            MaleTubeSource = maleTube.Source,
-            MaleAxisMethod = maleTube.AxisMethod,
-            MaleAxisConfidence = maleTube.AxisConfidence,
             WallPair = wallPair,
             Male = new JointFaceSelection(maleOccurrence, maleSide),
             MaleOpposite = new JointFaceSelection(maleOccurrence, oppositeMaleSide),
@@ -182,6 +188,29 @@ internal sealed class OccurrenceSelectionService
             SideAGapMm = sideAGap,
             SideBGapMm = sideBGap
         };
+    }
+
+    private double? TryGetAnalyzedWallThickness(PartDocument document)
+    {
+        try { return _tubeAnalyzer.Analyze(document).ExactWallThicknessMm; }
+        catch (TubeAnalysisException) { return null; }
+    }
+
+    private Vector ToAssemblyVector(TubeCoordinate coordinate, ComponentOccurrence occurrence)
+    {
+        var vector = _application.TransientGeometry.CreateVector(
+            coordinate.X, coordinate.Y, coordinate.Z);
+        vector.TransformBy(occurrence.Transformation);
+        vector.Normalize();
+        return vector;
+    }
+
+    private Point ToAssemblyPoint(TubeCoordinate coordinate, ComponentOccurrence occurrence)
+    {
+        var point = _application.TransientGeometry.CreatePoint(
+            coordinate.X, coordinate.Y, coordinate.Z);
+        point.TransformBy(occurrence.Transformation);
+        return point;
     }
 
     public static PartDocument GetPartDocument(ComponentOccurrence occurrence)
