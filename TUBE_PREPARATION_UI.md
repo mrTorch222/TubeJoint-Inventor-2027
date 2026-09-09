@@ -5,8 +5,7 @@ Inventor mutations remain in `TubePreparationService`.
 
 ## First screen
 
-The preparation command should replace the overloaded Yes/No message box with one
-review window containing:
+The preparation command uses one review window containing:
 
 - a row per unique recognized IPT;
 - current file name and proposed file name;
@@ -14,7 +13,7 @@ review window containing:
 - wall thickness and assembly quantity;
 - recognition status or typed failure;
 - a per-row include checkbox;
-- one global **Переименовать файлы** checkbox, disabled by default;
+- one global **Переименовать файлы** checkbox, unchecked by default;
 - fixed target orientation **Продольная ось → +Z**;
 - **Применить** and **Отмена** actions.
 

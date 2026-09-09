@@ -1,9 +1,9 @@
-# First test checklist — iteration 10
+# First test checklist — iteration 11
 
 Use disposable copies of the assembly and both IPT files.
 
 - [ ] Inventor 2027 was closed during install.
-- [ ] Package `iteration10-tube-recognition-v2` is shown by `build.ps1` and `install.ps1`.
+- [ ] Package `iteration11-tube-preparation-ui-v1` is shown by `build.ps1` and `install.ps1`.
 - [ ] `build.ps1` completes without compiler errors.
 - [ ] `install.ps1` completes.
 - [ ] The **Шип-паз труб** panel appears on **Design** and no longer on Assemble.
@@ -71,11 +71,12 @@ Use disposable copies of the assembly and both IPT files.
   starts from the edited value instead of the previous triad origin.
 
 If something fails, send the complete error text and one screenshot showing the selected members plus the model browser.
-# Итерация 10 — распознавание и нормализация трубы
+# Итерация 11 — окно подготовки, распознавание и нормализация трубы
 
 1. Откройте копию простой прямой профильной трубы IPT (одно solid-тело).
 2. На вкладке **Model**, панель **Подготовка труб**, нажмите **Подготовить трубы**.
-3. Сверьте показанные ширину, высоту, стенку и длину, затем подтвердите изменение.
+3. В таблице сверите точное и номинальное сечение, точную и округлённую стенку,
+   количество вхождений, текущее и предлагаемое имя.
 4. Проверьте iProperties: `Description`, `Stock Number` и пользовательские
    `TubeJoint.Profile`, `TubeJoint.LengthMm`, `TubeJoint.WallThicknessMm`.
 5. Проверьте, что центр тела находится в `(0,0,0)`, продольная ось идёт по `+Z`,
@@ -87,10 +88,14 @@ If something fails, send the complete error text and one screenshot showing the 
 8. До и после операции измерьте положение нескольких вхождений в IAM. Их мировые
    габариты должны совпасть в пределах 0,05 мм, а тела внутри IPT должны оказаться
    по центру и вдоль локальных осей XYZ.
-9. Отдельно проверьте отказ на solid-прутке и детали с несколькими solid-телами.
+9. Отдельно проверьте solid-пруток и деталь с несколькими solid-телами: они должны
+   остаться в таблице со статусом отказа и недоступным флажком выбора.
 10. Для IPT `Стойка левая.ipt` размера 40×20×1,5 мм с 6 вхождениями проверьте
     имя `40x20x1,5_Стойка левая_6 шт.ipt`; ссылка IAM должна указывать на новый файл.
-11. Повторите команду с ответом **Нет** в окне подтверждения: координаты и
+11. Повторите команду с выключенным флажком **Переименовать файлы**: координаты и
     iProperties должны обновиться, а имена файлов — остаться прежними.
-9. Проверьте квадратную трубу со скруглёнными углами: угловые цилиндрические
+12. Снимите выбор с одной распознанной трубы: она не должна измениться, остальные
+    выбранные трубы должны подготовиться обычным образом.
+13. Закройте окно кнопкой **Отмена** и крестиком: документы не должны измениться.
+14. Проверьте квадратную трубу со скруглёнными углами: угловые цилиндрические
    грани не должны приводить к распознаванию круглой трубы.

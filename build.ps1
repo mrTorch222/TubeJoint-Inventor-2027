@@ -10,4 +10,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Build complete: src\TubeJoint.AddIn\bin\Release\net8.0-windows"
-Write-Host "Package: iteration10-tube-recognition-v5"
+Write-Host "Package: iteration11-tube-preparation-ui-v1"

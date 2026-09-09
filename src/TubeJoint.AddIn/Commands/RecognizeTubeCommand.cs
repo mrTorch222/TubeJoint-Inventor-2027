@@ -2,6 +2,7 @@ using System.Windows.Forms;
 using Inventor;
 using TubeJoint.AddIn.Services;
 using TubeJoint.AddIn.TubeAnalysis;
+using TubeJoint.AddIn.UI;
 using IOFile = System.IO.File;
 using IOPath = System.IO.Path;
 
@@ -27,41 +28,29 @@ internal sealed class RecognizeTubeCommand
         {
             var context = GetTargets();
             var renamePlans = BuildRenamePlans(context.Targets);
-            var lines = renamePlans.Take(8)
-                .Select(plan => $"• {plan.Target.Document.DisplayName} → " +
-                                IOPath.GetFileName(plan.TargetPath))
+            using var dialog = new TubePreparationDialog(BuildViewRows(context, renamePlans));
+            if (dialog.ShowDialog() != DialogResult.OK) return;
+
+            var selectedKeys = dialog.SelectedDocumentKeys;
+            var selectedTargets = context.Targets
+                .Where(target => selectedKeys.Contains(target.DocumentKey))
                 .ToList();
-            if (renamePlans.Count > lines.Count)
-                lines.Add($"• …ещё {renamePlans.Count - lines.Count}");
-            var details = string.Join("\n", lines);
-            var assemblyText = context.Assembly is null
-                ? string.Empty
-                : $"\n\nВхождений в сборке: {context.OccurrenceCount}. " +
-                  "Их положение будет сохранено обратной трансформацией.";
-            var confirmation = MessageBox.Show(
-                $"Распознано файлов труб: {context.Targets.Count}\n\n{details}\n\n" +
-                "Трубы будут отцентрированы, направлены вдоль +Z, а iProperties заполнены.\n\n" +
-                "Да — также назначить показанные имена файлов.\n" +
-                "Нет — оставить текущие имена файлов.\n" +
-                "Отмена — ничего не менять." + assemblyText,
-                "Распознать и нормализовать трубу",
-                MessageBoxButtons.YesNoCancel,
-                MessageBoxIcon.Question,
-                MessageBoxDefaultButton.Button2);
-            if (confirmation == DialogResult.Cancel) return;
-            var renameFiles = confirmation == DialogResult.Yes;
+            var selectedRenamePlans = renamePlans
+                .Where(plan => selectedKeys.Contains(plan.Target.DocumentKey))
+                .ToList();
+            var renameFiles = dialog.RenameFiles;
 
             transaction = context.Assembly is not null
                 ? _application.TransactionManager.StartGlobalTransaction(
                     (Inventor._Document)context.Assembly,
                     "TubeJoint: нормализовать все трубы")
                 : _application.TransactionManager.StartTransaction(
-                    (Inventor._Document)context.Targets[0].Document,
+                    (Inventor._Document)selectedTargets[0].Document,
                     "TubeJoint: распознать и нормализовать трубу");
 
-            var snapshots = CaptureOccurrences(context.Targets);
+            var snapshots = CaptureOccurrences(selectedTargets);
             var movedCount = 0;
-            foreach (var target in context.Targets)
+            foreach (var target in selectedTargets)
             {
                 var normalization = _preparation.CreateNormalizationTransform(target.Analysis);
                 if (!_preparation.NormalizeAndWriteProperties(target.Document, target.Analysis)) continue;
@@ -77,15 +66,15 @@ internal sealed class RecognizeTubeCommand
             transaction.End();
             transaction = null;
 
-            var renamedCount = renameFiles ? ApplyRenames(renamePlans, context.Assembly) : 0;
+            var renamedCount = renameFiles ? ApplyRenames(selectedRenamePlans, context.Assembly) : 0;
 
             MessageBox.Show(
-                $"Обработано файлов труб: {context.Targets.Count}.\n" +
+                $"Обработано файлов труб: {selectedTargets.Count}.\n" +
                 $"Нормализовано тел: {movedCount}.\n" +
                 (renameFiles ? $"Назначено новых имён: {renamedCount}.\n" : "Имена файлов сохранены.\n") +
                 (context.Assembly is null
                     ? "Тело выровнено по локальным осям XYZ."
-                    : $"Положение {context.OccurrenceCount} вхождений в сборке сохранено.") +
+                    : $"Положение {selectedTargets.Sum(target => target.Occurrences.Count)} вхождений в сборке сохранено.") +
                 (renameFiles ? "\nСтарые IPT оставлены рядом как резервные копии." : string.Empty),
                 "Распознавание трубы",
                 MessageBoxButtons.OK,
@@ -103,34 +92,58 @@ internal sealed class RecognizeTubeCommand
     private RecognitionContext GetTargets()
     {
         if (_application.ActiveDocument is PartDocument part)
-            return new RecognitionContext(null,
-                new List<TubeTarget> { new(part, _tubeAnalyzer.Analyze(part), new List<ComponentOccurrence>()) });
+            return ScanDocuments(null,
+                new[] { new DocumentGroup(part, new List<ComponentOccurrence>()) });
         if (_application.ActiveDocument is not AssemblyDocument assembly)
             throw new InvalidOperationException("Откройте деталь IPT или сборку IAM.");
 
         var groups = EnumerateLeafOccurrences(assembly.ComponentDefinition.Occurrences)
             .GroupBy(occurrence => DocumentKey(OccurrenceSelectionService.GetPartDocument(occurrence)),
-                StringComparer.OrdinalIgnoreCase);
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var occurrences = group.ToList();
+                return new DocumentGroup(
+                    OccurrenceSelectionService.GetPartDocument(occurrences[0]), occurrences);
+            });
+        return ScanDocuments(assembly, groups);
+    }
+
+    private RecognitionContext ScanDocuments(
+        AssemblyDocument? assembly,
+        IEnumerable<DocumentGroup> documentGroups)
+    {
         var targets = new List<TubeTarget>();
-        foreach (var group in groups)
+        var failures = new List<ScanFailure>();
+        foreach (var group in documentGroups)
         {
-            var occurrences = group.ToList();
             try
             {
-                var document = OccurrenceSelectionService.GetPartDocument(occurrences[0]);
-                if (!document.IsModifiable) continue;
-                targets.Add(new TubeTarget(document, _tubeAnalyzer.Analyze(document), occurrences));
+                if (!group.Document.IsModifiable)
+                {
+                    failures.Add(new ScanFailure(
+                        DocumentKey(group.Document), group.Document.DisplayName,
+                        group.Occurrences.Count, "Деталь недоступна для изменения"));
+                    continue;
+                }
+                targets.Add(new TubeTarget(
+                    DocumentKey(group.Document), group.Document,
+                    _tubeAnalyzer.Analyze(group.Document), group.Occurrences));
             }
-            catch
+            catch (TubeAnalysisException exception)
             {
-                // Assemblies commonly contain plates, fasteners and reference
-                // components. Only geometry positively recognized as a tube is changed.
+                failures.Add(new ScanFailure(
+                    DocumentKey(group.Document), group.Document.DisplayName,
+                    group.Occurrences.Count, FailureText(exception)));
+            }
+            catch (Exception exception)
+            {
+                failures.Add(new ScanFailure(
+                    DocumentKey(group.Document), group.Document.DisplayName,
+                    group.Occurrences.Count, exception.Message));
             }
         }
-        if (targets.Count == 0)
-            throw new InvalidOperationException(
-                "В сборке не найдено доступных прямых полых труб с одним solid-телом.");
-        return new RecognitionContext(assembly, targets);
+        return new RecognitionContext(assembly, targets, failures);
     }
 
     private static IEnumerable<ComponentOccurrence> EnumerateLeafOccurrences(
@@ -157,14 +170,11 @@ internal sealed class RecognizeTubeCommand
 
     private static List<RenamePlan> BuildRenamePlans(IReadOnlyList<TubeTarget> targets)
     {
-        foreach (var target in targets)
-            if (string.IsNullOrWhiteSpace(target.Document.FullFileName))
-                throw new InvalidOperationException(
-                    $"Сначала сохраните деталь на диск: {target.Document.DisplayName}");
-
         var plans = new List<RenamePlan>();
         var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var target in targets.OrderBy(item => item.Document.FullFileName,
+        foreach (var target in targets
+                     .Where(item => !string.IsNullOrWhiteSpace(item.Document.FullFileName))
+                     .OrderBy(item => item.Document.FullFileName,
                      StringComparer.OrdinalIgnoreCase))
         {
             var suffix = 1;
@@ -185,6 +195,78 @@ internal sealed class RecognizeTubeCommand
         }
         return plans;
     }
+
+    private static List<TubePreparationViewRow> BuildViewRows(
+        RecognitionContext context,
+        IReadOnlyList<RenamePlan> renamePlans)
+    {
+        var plansByDocument = renamePlans.ToDictionary(
+            plan => plan.Target.DocumentKey, StringComparer.OrdinalIgnoreCase);
+        var rows = context.Targets.Select(target =>
+        {
+            plansByDocument.TryGetValue(target.DocumentKey, out var renamePlan);
+            return new TubePreparationViewRow
+            {
+                DocumentKey = target.DocumentKey,
+                CurrentFileName = CurrentFileName(target.Document),
+                MeasuredSection = SectionText(target.Analysis, exact: true),
+                NominalSection = SectionText(target.Analysis, exact: false),
+                WallThickness = ExactFormat(target.Analysis.ExactWallThicknessMm) + " → " +
+                    TubePreparationService.Format(target.Analysis.NominalWallThicknessMm) + " мм",
+                Quantity = Math.Max(1, target.Occurrences.Count),
+                ProposedFileName = renamePlan is null
+                    ? "Сначала сохраните IPT"
+                    : IOPath.GetFileName(renamePlan.TargetPath),
+                Status = "Готово к подготовке",
+                CanPrepare = true,
+                CanRename = renamePlan is not null
+            };
+        }).Concat(context.Failures.Select(failure => new TubePreparationViewRow
+        {
+            DocumentKey = failure.DocumentKey,
+            CurrentFileName = failure.DisplayName,
+            MeasuredSection = "—",
+            NominalSection = "—",
+            WallThickness = "—",
+            Quantity = Math.Max(1, failure.OccurrenceCount),
+            ProposedFileName = "—",
+            Status = failure.Message,
+            CanPrepare = false,
+            CanRename = false
+        })).OrderByDescending(row => row.CanPrepare)
+          .ThenBy(row => row.CurrentFileName, StringComparer.CurrentCultureIgnoreCase)
+          .ToList();
+        return rows;
+    }
+
+    private static string CurrentFileName(PartDocument document) =>
+        string.IsNullOrWhiteSpace(document.FullFileName)
+            ? document.DisplayName
+            : IOPath.GetFileName(document.FullFileName);
+
+    private static string SectionText(TubeAnalysisResult analysis, bool exact)
+    {
+        var width = exact ? analysis.ExactWidthMm : analysis.NominalWidthMm;
+        var height = exact ? analysis.ExactHeightMm : analysis.NominalHeightMm;
+        Func<double, string> format = exact
+            ? ExactFormat
+            : TubePreparationService.Format;
+        return analysis.SectionKind == TubeSectionKind.Round
+            ? $"Ø{format(width)} мм"
+            : $"{format(width)} × {format(height)} мм";
+    }
+
+    private static string ExactFormat(double value) => value.ToString("0.###");
+
+    private static string FailureText(TubeAnalysisException exception) => exception.Failure switch
+    {
+        TubeAnalysisFailure.NoSolidBody => "Нет solid-тела",
+        TubeAnalysisFailure.MultipleSolidBodies => "Несколько solid-тел",
+        TubeAnalysisFailure.AmbiguousAxis => "Не удалось определить продольную ось",
+        TubeAnalysisFailure.UnsupportedSection => "Не распознано как прямая труба",
+        TubeAnalysisFailure.SolidBar => "Сплошной профиль, не труба",
+        _ => exception.Message
+    };
 
     private static string BuildTubeFileName(TubeTarget target, int collisionSuffix)
     {
@@ -282,15 +364,28 @@ internal sealed class RecognizeTubeCommand
     }
 
     private sealed record TubeTarget(
+        string DocumentKey,
         PartDocument Document,
         TubeAnalysisResult Analysis,
         List<ComponentOccurrence> Occurrences);
+
+    private sealed record DocumentGroup(
+        PartDocument Document,
+        List<ComponentOccurrence> Occurrences);
+
+    private sealed record ScanFailure(
+        string DocumentKey,
+        string DisplayName,
+        int OccurrenceCount,
+        string Message);
 
     private sealed record RenamePlan(
         TubeTarget Target, string SourcePath, string TargetPath);
 
     private sealed record RecognitionContext(
-        AssemblyDocument? Assembly, List<TubeTarget> Targets)
+        AssemblyDocument? Assembly,
+        List<TubeTarget> Targets,
+        List<ScanFailure> Failures)
     {
         public int OccurrenceCount => Targets.Sum(target => target.Occurrences.Count);
     }
