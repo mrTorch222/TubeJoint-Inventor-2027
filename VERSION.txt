@@ -1,6 +1,6 @@
 TubeJoint for Autodesk Inventor 2027
 Iteration: 11
-Package: iteration11-tube-preparation-ui-v1
+Package: iteration11-inventor-style-ui-v1
 Template file: StandardSideTenonSlot_v6.ipt (preserved in place)
 Template schema: 10, migrated by adding missing TJ_* parameters only
 Ribbon tab: Design (id_TabDesign)
@@ -54,6 +54,8 @@ Tube normalization: OBB centre to origin; length/width/height aligned to +Z/+X/+
 Recognition safety: exactly one writable solid body, hollow-profile validation and pre-apply review
 Tube preparation UI: per-file review table with selection, exact/nominal dimensions and typed failure status
 Rename UI: separate opt-in checkbox, unchecked by default; unsaved selected IPTs cannot be renamed
+Inventor-style UI: 330 px property pane, compact vertical rows, current Inventor theme palette
+Docking: left/right docking remains available; remembered user pane state is preserved
 Cancel: DockableWindow X stops triads/timer, deletes stale preview graphics and resets the command
 Undo: failed global transactions are always aborted; template working values are restored without save
 Auto slot thickness: measured male-wall value bypasses manual standard-step validation

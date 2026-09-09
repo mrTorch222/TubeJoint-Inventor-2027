@@ -5,12 +5,12 @@ namespace TubeJoint.AddIn.UI;
 
 internal sealed class TubePreparationDialog : Form
 {
-    private static readonly Color PanelBack = Color.FromArgb(47, 57, 71);
-    private static readonly Color HeaderBack = Color.FromArgb(65, 77, 95);
-    private static readonly Color GridBack = Color.FromArgb(37, 47, 61);
-    private static readonly Color TextColor = Color.FromArgb(235, 239, 244);
-    private static readonly Color MutedText = Color.FromArgb(185, 194, 205);
-    private static readonly Color Accent = Color.FromArgb(27, 159, 202);
+    private static Color PanelBack => InventorThemePalette.Current.PanelBack;
+    private static Color HeaderBack => InventorThemePalette.Current.SectionBack;
+    private static Color GridBack => InventorThemePalette.Current.EditorBack;
+    private static Color TextColor => InventorThemePalette.Current.TextColor;
+    private static Color MutedText => InventorThemePalette.Current.MutedText;
+    private static Color Accent => InventorThemePalette.Current.Accent;
     private readonly IReadOnlyList<TubePreparationViewRow> _rows;
     private readonly DataGridView _grid = new();
     private readonly CheckBox _renameFiles = new();

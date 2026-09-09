@@ -6,13 +6,13 @@ namespace TubeJoint.AddIn.UI;
 
 internal sealed class JointPropertiesControl : UserControl
 {
-    private static readonly Color PanelBack = Color.FromArgb(47, 57, 71);
-    private static readonly Color SectionBack = Color.FromArgb(65, 77, 95);
-    private static readonly Color EditorBack = Color.FromArgb(37, 47, 61);
-    private static readonly Color Border = Color.FromArgb(83, 97, 116);
-    private static readonly Color TextColor = Color.FromArgb(235, 239, 244);
-    private static readonly Color MutedText = Color.FromArgb(185, 194, 205);
-    private static readonly Color Accent = Color.FromArgb(27, 159, 202);
+    private static Color PanelBack => InventorThemePalette.Current.PanelBack;
+    private static Color SectionBack => InventorThemePalette.Current.SectionBack;
+    private static Color EditorBack => InventorThemePalette.Current.EditorBack;
+    private static Color Border => InventorThemePalette.Current.Border;
+    private static Color TextColor => InventorThemePalette.Current.TextColor;
+    private static Color MutedText => InventorThemePalette.Current.MutedText;
+    private static Color Accent => InventorThemePalette.Current.Accent;
 
     private readonly FlatNumericBox _tenonWidth;
     private readonly FlatNumericBox _tenonHeight;
@@ -35,7 +35,7 @@ internal sealed class JointPropertiesControl : UserControl
     {
         AutoSize = true,
         ForeColor = Color.FromArgb(255, 190, 90),
-        MaximumSize = new Size(570, 0),
+        MaximumSize = new Size(300, 0),
         Margin = new Padding(5, 2, 5, 4),
         Visible = false
     };
@@ -73,7 +73,7 @@ internal sealed class JointPropertiesControl : UserControl
         Font = new Font("Segoe UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point);
         Dock = DockStyle.Fill;
         AutoScroll = true;
-        MinimumSize = new Size(420, 650);
+        MinimumSize = new Size(285, 560);
 
         _root = new TableLayoutPanel
         {
@@ -100,15 +100,15 @@ internal sealed class JointPropertiesControl : UserControl
         }, SizeType.AutoSize);
 
         ConfigurePresets(automaticWidth, automaticHeight);
-        AddRoot(_preset, SizeType.Absolute, 27);
+        AddRoot(_preset, SizeType.Absolute, 25);
 
-        AddRoot(Section("▼  Выбор"), SizeType.Absolute, 23);
+        AddRoot(Section("▼  Выбор"), SizeType.Absolute, 21);
         AddRoot(ReadOnlyRow(
             $"Шип · {selection.MaleWallThicknessMm:0.###} мм",
-            selection.Male.Occurrence.Name), SizeType.Absolute, 29);
+            selection.Male.Occurrence.Name), SizeType.Absolute, 27);
         AddRoot(ReadOnlyRow(
             $"Паз · {selection.FemaleWallThicknessMm:0.###} мм",
-            selection.Female.Occurrence.Name), SizeType.Absolute, 29);
+            selection.Female.Occurrence.Name), SizeType.Absolute, 27);
         AddRoot(new Label
         {
             Text = $"Угол: {selection.InsertionDeviationDegrees:0.0}°  ·  " +
@@ -116,9 +116,9 @@ internal sealed class JointPropertiesControl : UserControl
             ForeColor = MutedText,
             TextAlign = ContentAlignment.MiddleLeft,
             Margin = new Padding(5, 0, 2, 4)
-        }, SizeType.Absolute, 23);
+        }, SizeType.Absolute, 21);
 
-        AddRoot(Section("▼  Стороны"), SizeType.Absolute, 23);
+        AddRoot(Section("▼  Стороны"), SizeType.Absolute, 21);
         var sides = new TableLayoutPanel
         {
             ColumnCount = 4,
@@ -144,15 +144,15 @@ internal sealed class JointPropertiesControl : UserControl
         _sideA.CheckedChanged += SideCheckedChanged;
         _sideB.CheckedChanged += SideCheckedChanged;
         _bothSides.CheckedChanged += SideCheckedChanged;
-        AddRoot(sides, SizeType.Absolute, 34);
+        AddRoot(sides, SizeType.Absolute, 30);
 
-        AddRoot(Section("▼  Размеры"), SizeType.Absolute, 23);
+        AddRoot(Section("▼  Размеры"), SizeType.Absolute, 21);
         AddRoot(new JointDiagramControl(
             _reliefFactor,
             _ventScale,
             _tenonHeight,
             _tenonWidth,
-            _clearance), SizeType.Absolute, 260);
+            _clearance), SizeType.Absolute, 190);
         AddRoot(_previewWarning, SizeType.AutoSize);
         var automatic = new FlowLayoutPanel
         {
@@ -165,19 +165,19 @@ internal sealed class JointPropertiesControl : UserControl
         _autoHeight.Text = "Авто Y";
         automatic.Controls.Add(_autoWidth);
         automatic.Controls.Add(_autoHeight);
-        AddRoot(automatic, SizeType.Absolute, 24);
+        AddRoot(automatic, SizeType.Absolute, 22);
         AddRoot(new Label
         {
             Text = $"Сечение трубы: {selection.MaleCrossSpanMm:0.#} × {selection.MaleProfileSpanMm:0.#} мм",
             ForeColor = MutedText,
             TextAlign = ContentAlignment.MiddleLeft,
             Margin = new Padding(5, 0, 2, 4)
-        }, SizeType.Absolute, 22);
+        }, SizeType.Absolute, 20);
 
-        AddRoot(Section("▼  Размещение"), SizeType.Absolute, 23);
-        AddRoot(EditorRow("Смещение вдоль", _jointOffset, "мм"), SizeType.Absolute, 29);
+        AddRoot(Section("▼  Размещение"), SizeType.Absolute, 21);
+        AddRoot(EditorRow("Смещение вдоль", _jointOffset, "мм"), SizeType.Absolute, 27);
 
-        AddRoot(Section("▼  Дополнительно"), SizeType.Absolute, 23);
+        AddRoot(Section("▼  Дополнительно"), SizeType.Absolute, 21);
         _centerVent = new CheckBox
         {
             Text = "Отверстие",
@@ -186,9 +186,9 @@ internal sealed class JointPropertiesControl : UserControl
             FlatStyle = FlatStyle.Flat,
             Margin = new Padding(5, 3, 2, 3)
         };
-        AddRoot(_centerVent, SizeType.Absolute, 27);
-        AddRoot(CompactHoleOffsets(_holeOffsetX, _holeOffsetY), SizeType.Absolute, 27);
-        AddRoot(CompactCentered(_holeManipulator, 210), SizeType.Absolute, 29);
+        AddRoot(_centerVent, SizeType.Absolute, 25);
+        AddRoot(CompactHoleOffsets(_holeOffsetX, _holeOffsetY), SizeType.Absolute, 25);
+        AddRoot(CompactCentered(_holeManipulator, 210), SizeType.Absolute, 27);
 
         var buttons = new FlowLayoutPanel
         {
@@ -197,13 +197,13 @@ internal sealed class JointPropertiesControl : UserControl
             Padding = new Padding(0, 3, 0, 0),
             Margin = new Padding(2)
         };
-        var ok = ActionButton("OK", Color.FromArgb(26, 126, 166));
-        var cancel = ActionButton("Cancel", Color.FromArgb(54, 64, 79));
+        var ok = ActionButton("OK", Accent);
+        var cancel = ActionButton("Cancel", SectionBack);
         ok.Click += (_, _) => Accepted?.Invoke(this, EventArgs.Empty);
         cancel.Click += (_, _) => Cancelled?.Invoke(this, EventArgs.Empty);
         buttons.Controls.Add(ok);
         buttons.Controls.Add(cancel);
-        AddRoot(buttons, SizeType.Absolute, 36);
+        AddRoot(buttons, SizeType.Absolute, 34);
 
         Controls.Add(_root);
 
@@ -601,7 +601,7 @@ internal sealed class JointPropertiesControl : UserControl
             UseVisualStyleBackColor = false
         };
         button.FlatAppearance.BorderColor = Border;
-        button.FlatAppearance.CheckedBackColor = Color.FromArgb(26, 126, 166);
+        button.FlatAppearance.CheckedBackColor = Accent;
         return button;
     }
 
@@ -620,7 +620,7 @@ internal sealed class JointPropertiesControl : UserControl
             UseVisualStyleBackColor = false
         };
         button.FlatAppearance.BorderColor = Border;
-        button.FlatAppearance.CheckedBackColor = Color.FromArgb(26, 126, 166);
+        button.FlatAppearance.CheckedBackColor = Accent;
         return button;
     }
 
@@ -662,7 +662,7 @@ internal sealed class JointPropertiesControl : UserControl
 /// <summary>An Inventor-like parameter image with editable values placed on its leaders.</summary>
 internal sealed class JointDiagramControl : UserControl
 {
-    private static readonly Color Background = Color.FromArgb(37, 47, 61);
+    private static Color Background => InventorThemePalette.Current.EditorBack;
     private readonly Image? _diagram;
     private readonly Control _relief;
     private readonly Control _ventScale;
@@ -763,7 +763,7 @@ internal sealed class JointDiagramControl : UserControl
             Text = suffix,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = Color.FromArgb(205, 213, 222),
+            ForeColor = InventorThemePalette.Current.MutedText,
             Margin = Padding.Empty
         }, 1, 0);
         return host;

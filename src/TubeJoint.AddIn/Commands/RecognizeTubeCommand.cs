@@ -28,6 +28,7 @@ internal sealed class RecognizeTubeCommand
         {
             var context = GetTargets();
             var renamePlans = BuildRenamePlans(context.Targets);
+            InventorThemePalette.Refresh(_application);
             using var dialog = new TubePreparationDialog(BuildViewRows(context, renamePlans));
             if (dialog.ShowDialog() != DialogResult.OK) return;
 

@@ -14,7 +14,7 @@ internal sealed class NativeJointInput : IDisposable
         Hole
     }
 
-    private const string WindowInternalName = "TubeJoint.Properties.V5";
+    private const string WindowInternalName = "TubeJoint.Properties.V6";
     private readonly Inventor.Application _application;
     private JointPairSelection _selection;
     private readonly JointPropertiesControl _control;
@@ -47,7 +47,8 @@ internal sealed class NativeJointInput : IDisposable
                      "TubeJoint.Properties.V1",
                      "TubeJoint.Properties.V2",
                      "TubeJoint.Properties.V3",
-                     "TubeJoint.Properties.V4"
+                     "TubeJoint.Properties.V4",
+                     "TubeJoint.Properties.V5"
                  })
         {
             try
@@ -68,6 +69,7 @@ internal sealed class NativeJointInput : IDisposable
             _window = windows.Add(StandardAddInServer.ClientId, WindowInternalName, "Properties");
         }
 
+        InventorThemePalette.Refresh(application);
         _control = new JointPropertiesControl(selection, settings);
         _control.CreateControl();
         _control.Accepted += OnAccepted;
@@ -82,12 +84,15 @@ internal sealed class NativeJointInput : IDisposable
         _window.ShowVisibilityCheckBox = false;
         _window.DisabledDockingStates =
             DockingStateEnum.kDockTop | DockingStateEnum.kDockBottom;
-        _window.SetMinimumSize(440, 620);
-        // This command is intentionally modeless and floating. A docked property window
-        // becomes too narrow and changes the proportions of the parameter rows.
-        _window.SetDockingState(DockingStateEnum.kFloat);
-        _window.Width = 620;
-        _window.Height = 790;
+        _window.SetMinimumSize(285, 560);
+        // Match Inventor's narrow vertical property panels on first use. Inventor
+        // restores the user's own docking and sizing after the pane is customized.
+        if (!_window.IsCustomized)
+        {
+            _window.SetDockingState(DockingStateEnum.kFloat);
+            _window.Width = 330;
+            _window.Height = 720;
+        }
         _windowEvents = windows.Events;
         _windowEvents.OnHide += OnWindowHidden;
     }

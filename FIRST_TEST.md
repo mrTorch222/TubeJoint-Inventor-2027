@@ -3,13 +3,16 @@
 Use disposable copies of the assembly and both IPT files.
 
 - [ ] Inventor 2027 was closed during install.
-- [ ] Package `iteration11-tube-preparation-ui-v1` is shown by `build.ps1` and `install.ps1`.
+- [ ] Package `iteration11-inventor-style-ui-v1` is shown by `build.ps1` and `install.ps1`.
 - [ ] `build.ps1` completes without compiler errors.
 - [ ] `install.ps1` completes.
 - [ ] The **Шип-паз труб** panel appears on **Design** and no longer on Assemble.
 - [ ] **Новое соединение** first asks for the whole male tube.
 - [ ] The second selection asks for a planar female face.
 - [ ] The `Properties` panel opens floating at a usable width and is not docked to the left.
+- [ ] On first use, the `Properties` panel is about 330 px wide and resembles Inventor's native vertical property panel.
+- [ ] The panel can be docked left or right, and its user-selected size/docking state survives reopening the command.
+- [ ] Panel, section, editor, text, and selection colors follow Inventor's active light or dark theme.
 - [ ] `Standard / Compact / Reinforced / Custom` presets change the manual dimensions.
 - [ ] Width and height start in manual mode; Auto options are still available.
 - [ ] Switching A / B / A+B highlights the corresponding male tube walls.
