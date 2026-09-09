@@ -19,5 +19,5 @@ Copy-Item (Join-Path $projectRoot "src\TubeJoint.AddIn\TubeJoint.AddIn.addin") $
 Copy-Item (Join-Path $projectRoot "VERSION.txt") $installDir -Force
 
 Write-Host "Installed to $installDir"
-Write-Host "Package: iteration11-inventor-style-ui-v2"
+Write-Host "Package: iteration11-inventor-style-ui-v3"
 Write-Host "Restart Autodesk Inventor 2027."

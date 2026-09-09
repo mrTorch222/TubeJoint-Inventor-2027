@@ -14,7 +14,7 @@ internal sealed class NativeJointInput : IDisposable
         Hole
     }
 
-    private const string WindowInternalName = "TubeJoint.Properties.V6";
+    private const string WindowInternalName = "TubeJoint.Properties.V7";
     private readonly Inventor.Application _application;
     private JointPairSelection _selection;
     private readonly JointPropertiesControl _control;
@@ -48,7 +48,8 @@ internal sealed class NativeJointInput : IDisposable
                      "TubeJoint.Properties.V2",
                      "TubeJoint.Properties.V3",
                      "TubeJoint.Properties.V4",
-                     "TubeJoint.Properties.V5"
+                     "TubeJoint.Properties.V5",
+                     "TubeJoint.Properties.V6"
                  })
         {
             try
@@ -90,8 +91,8 @@ internal sealed class NativeJointInput : IDisposable
         if (!_window.IsCustomized)
         {
             _window.SetDockingState(DockingStateEnum.kFloat);
-            _window.Width = 330;
-            _window.Height = 680;
+            _window.Width = 320;
+            _window.Height = 650;
         }
         _windowEvents = windows.Events;
         _windowEvents.OnHide += OnWindowHidden;

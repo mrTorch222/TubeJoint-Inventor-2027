@@ -329,6 +329,9 @@ internal sealed class JointPropertiesControl : UserControl
         _preset.BackColor = EditorBack;
         _preset.ForeColor = TextColor;
         _preset.FlatStyle = FlatStyle.Flat;
+        _preset.DrawMode = DrawMode.OwnerDrawFixed;
+        _preset.ItemHeight = 18;
+        _preset.DrawItem += PresetDrawItem;
         _preset.Margin = new Padding(2, 0, 2, 7);
         _preset.Tag = new Dictionary<string, (double Width, double Height)>
         {
@@ -343,6 +346,24 @@ internal sealed class JointPropertiesControl : UserControl
         };
         _preset.Items.AddRange(new object[] { "Стандартный", "Компактный", "Усиленный", "Пользовательский" });
         _preset.SelectedIndex = 0;
+    }
+
+    private void PresetDrawItem(object? sender, DrawItemEventArgs e)
+    {
+        if (e.Index < 0)
+            return;
+
+        var selectedInOpenList = _preset.DroppedDown &&
+                                 (e.State & DrawItemState.Selected) != 0;
+        using var background = new SolidBrush(selectedInOpenList ? Accent : EditorBack);
+        e.Graphics.FillRectangle(background, e.Bounds);
+        TextRenderer.DrawText(
+            e.Graphics,
+            Convert.ToString(_preset.Items[e.Index]) ?? string.Empty,
+            _preset.Font,
+            new Rectangle(e.Bounds.X + 3, e.Bounds.Y, e.Bounds.Width - 5, e.Bounds.Height),
+            TextColor,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
     }
 
     private void PresetChanged(object? sender, EventArgs e)
