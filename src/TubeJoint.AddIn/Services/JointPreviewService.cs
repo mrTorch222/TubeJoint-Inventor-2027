@@ -17,7 +17,7 @@ internal sealed class JointPreviewService : IDisposable
     private readonly Inventor.Application _application;
     private readonly AssemblyDocument _assembly;
     private readonly JointTemplateService _templates;
-    private readonly string _templatePath;
+    private string _templatePath;
     private TemplateProfileSet? _profiles;
     private ClientGraphics? _graphics;
     private GraphicsDataSets? _dataSets;
@@ -27,12 +27,19 @@ internal sealed class JointPreviewService : IDisposable
     public JointPreviewService(
         Inventor.Application application,
         AssemblyDocument assembly,
-        JointTemplateService templates)
+        JointTemplateService templates,
+        string templatePath)
     {
         _application = application;
         _assembly = assembly;
         _templates = templates;
-        _templatePath = templates.EnsureDefaultTemplate();
+        _templatePath = templates.EnsureTemplate(templatePath);
+    }
+
+    public void SelectTemplate(string templatePath)
+    {
+        _templatePath = _templates.EnsureTemplate(templatePath);
+        _profiles = null;
     }
 
     public string? Rebuild(JointPairSelection selection, TubeJointParameters parameters)

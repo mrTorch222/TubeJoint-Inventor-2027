@@ -7,8 +7,6 @@ internal sealed class JointStandardSettings
     public double AutoWidthMaximumMm { get; init; } = 40.0;
     public double AutoHeightFactor { get; init; } = 0.55;
     public double DimensionStepMm { get; init; } = 0.5;
-    public double CompactPresetFactor { get; init; } = 0.80;
-    public double ReinforcedPresetFactor { get; init; } = 1.15;
     public IReadOnlyList<double> SlotThicknessesMm { get; init; } =
         new[] { 1.0, 1.5, 2.0, 2.5, 3.0 };
 }

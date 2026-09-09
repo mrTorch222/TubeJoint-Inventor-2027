@@ -14,7 +14,7 @@ remains WinForms and follows the visual/behavioral contract below.
 
 ## Layout
 
-- Default floating width: 330 px; minimum width: 285 px.
+- Default floating width: 320 px; minimum width: 285 px.
 - Permit normal left/right docking.
 - Do not overwrite Inventor's remembered user size or docking state.
 - Use a top-to-bottom property workflow with compact 21 px section headers and

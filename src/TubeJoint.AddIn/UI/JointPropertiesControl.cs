@@ -16,7 +16,7 @@ internal sealed class JointPropertiesControl : UserControl
 
     private readonly FlatNumericBox _tenonWidth;
     private readonly FlatNumericBox _tenonHeight;
-    private readonly ComboBox _preset = new();
+    private readonly JointPresetToolbar _presetToolbar = new();
     private readonly CheckBox _autoWidth = AutoCheckBox();
     private readonly CheckBox _autoHeight = AutoCheckBox();
     private readonly FlatNumericBox _clearance = Numeric(0.20m, 0m, 20m, 0.05m, 2);
@@ -44,7 +44,13 @@ internal sealed class JointPropertiesControl : UserControl
     private bool _applyingPreset;
     private bool _settingManipulatorValues;
 
-    public JointPropertiesControl(JointPairSelection selection, JointStandardSettings settings)
+    public JointPropertiesControl(
+        JointPairSelection selection,
+        JointStandardSettings settings,
+        JointPresetCatalog presetCatalog,
+        IReadOnlyList<JointTemplateDescriptor> templates,
+        JointPreset? initialPreset,
+        string initialTemplateFileName)
     {
         _settings = settings;
         var automaticWidth = CalculateAutomaticWidth(selection, settings);
@@ -60,12 +66,12 @@ internal sealed class JointPropertiesControl : UserControl
         _autoWidth.CheckedChanged += (_, _) =>
         {
             _tenonWidth.Enabled = !_autoWidth.Checked;
-            ParametersChanged?.Invoke(this, EventArgs.Empty);
+            if (!_applyingPreset) ParametersChanged?.Invoke(this, EventArgs.Empty);
         };
         _autoHeight.CheckedChanged += (_, _) =>
         {
             _tenonHeight.Enabled = !_autoHeight.Checked;
-            ParametersChanged?.Invoke(this, EventArgs.Empty);
+            if (!_applyingPreset) ParametersChanged?.Invoke(this, EventArgs.Empty);
         };
 
         BackColor = PanelBack;
@@ -102,8 +108,7 @@ internal sealed class JointPropertiesControl : UserControl
             Margin = new Padding(2, 2, 2, 5)
         }, SizeType.AutoSize);
 
-        ConfigurePresets(automaticWidth, automaticHeight);
-        AddRoot(_preset, SizeType.Absolute, 25);
+        AddRoot(_presetToolbar, SizeType.Absolute, 54);
 
         AddRoot(Section("▼  Выбор"), SizeType.Absolute, 21);
         AddRoot(ReadOnlyRow(
@@ -230,7 +235,21 @@ internal sealed class JointPropertiesControl : UserControl
         _ventScale.ValueChanged += ParameterValueChanged;
         _holeManipulator.CheckedChanged += (_, _) =>
             HoleManipulatorRequested?.Invoke(_holeManipulator.Checked);
-        _preset.SelectedIndexChanged += PresetChanged;
+        _presetToolbar.PresetChanged += PresetSelectionChanged;
+        _presetToolbar.TemplateChanged += TemplateSelectionChanged;
+        _presetToolbar.SaveAsRequested += (_, _) => SavePresetAsRequested?.Invoke(this, EventArgs.Empty);
+        _presetToolbar.SaveCurrentRequested += (_, _) => SavePresetRequested?.Invoke(this, EventArgs.Empty);
+        _presetToolbar.RenameRequested += (_, _) => RenamePresetRequested?.Invoke(this, EventArgs.Empty);
+        _presetToolbar.DeleteRequested += (_, _) => DeletePresetRequested?.Invoke(this, EventArgs.Empty);
+        _presetToolbar.CreateTemplateRequested += (_, _) => CreateTemplateRequested?.Invoke(this, EventArgs.Empty);
+        _presetToolbar.EditTemplateRequested += (_, _) => EditTemplateRequested?.Invoke(this, EventArgs.Empty);
+        _presetToolbar.SortOrderRequested += order => SortOrderRequested?.Invoke(order);
+        _presetToolbar.StartupModeRequested += mode => StartupModeRequested?.Invoke(mode);
+        _presetToolbar.Bind(
+            presetCatalog, templates, initialPreset?.Id,
+            initialTemplateFileName);
+        if (initialPreset is not null)
+            ApplyPreset(initialPreset);
     }
 
     public event EventHandler? Accepted;
@@ -241,6 +260,19 @@ internal sealed class JointPropertiesControl : UserControl
     public event EventHandler? JointOffsetEdited;
     public event EventHandler? HoleOffsetsEdited;
     public event Action<bool>? HoleManipulatorRequested;
+    public event EventHandler? SavePresetAsRequested;
+    public event EventHandler? SavePresetRequested;
+    public event EventHandler? RenamePresetRequested;
+    public event EventHandler? DeletePresetRequested;
+    public event EventHandler? CreateTemplateRequested;
+    public event EventHandler? EditTemplateRequested;
+    public event EventHandler? SelectedTemplateChanged;
+    public event EventHandler? SelectedPresetChanged;
+    public event Action<JointPresetSortOrder>? SortOrderRequested;
+    public event Action<JointPresetStartupMode>? StartupModeRequested;
+
+    public JointPreset? SelectedPreset => _presetToolbar.SelectedPreset;
+    public JointTemplateDescriptor? SelectedTemplate => _presetToolbar.SelectedTemplate;
 
     public void SetHoleOffsets(double xMm, double yMm)
     {
@@ -291,7 +323,7 @@ internal sealed class JointPropertiesControl : UserControl
 
     public TubeJointParameters GetParameters(JointPairSelection selection) => new()
     {
-        PresetName = Convert.ToString(_preset.SelectedItem) ?? "Стандартный",
+        PresetName = SelectedPreset?.Name ?? string.Empty,
         TenonWidthMm = Decimal.ToDouble(_tenonWidth.Value),
         TenonHeightMm = Decimal.ToDouble(_tenonHeight.Value),
         AutoTenonWidth = _autoWidth.Checked,
@@ -323,63 +355,82 @@ internal sealed class JointPropertiesControl : UserControl
         VentScalePercent = Decimal.ToDouble(_ventScale.Value)
     };
 
-    private void ConfigurePresets(double standardWidth, double standardHeight)
+    public JointPreset CapturePreset(string name, JointPairSelection selection, string? existingId = null)
     {
-        _preset.DropDownStyle = ComboBoxStyle.DropDownList;
-        _preset.BackColor = EditorBack;
-        _preset.ForeColor = TextColor;
-        _preset.FlatStyle = FlatStyle.Flat;
-        _preset.DrawMode = DrawMode.OwnerDrawFixed;
-        _preset.ItemHeight = 18;
-        _preset.DrawItem += PresetDrawItem;
-        _preset.Margin = new Padding(2, 0, 2, 7);
-        _preset.Tag = new Dictionary<string, (double Width, double Height)>
+        var parameters = GetParameters(selection);
+        var previous = existingId is null ? null : SelectedPreset;
+        var now = DateTimeOffset.UtcNow;
+        return new JointPreset
         {
-            ["Стандартный"] = (standardWidth, standardHeight),
-            ["Компактный"] = (RoundToStep(standardWidth * _settings.CompactPresetFactor,
-                    _settings.DimensionStepMm),
-                RoundToStep(standardHeight * _settings.CompactPresetFactor, _settings.DimensionStepMm)),
-            ["Усиленный"] = (RoundToStep(standardWidth * _settings.ReinforcedPresetFactor,
-                    _settings.DimensionStepMm),
-                RoundToStep(standardHeight * _settings.ReinforcedPresetFactor, _settings.DimensionStepMm)),
-            ["Пользовательский"] = (standardWidth, standardHeight)
+            Id = existingId ?? Guid.NewGuid().ToString("N"),
+            Name = name.Trim(),
+            TemplateFileName = SelectedTemplate?.FileName ?? string.Empty,
+            TenonWidthMm = parameters.TenonWidthMm,
+            TenonHeightMm = parameters.TenonHeightMm,
+            AutoTenonWidth = parameters.AutoTenonWidth,
+            AutoTenonHeight = parameters.AutoTenonHeight,
+            ClearanceMm = parameters.ClearanceMm,
+            SideMode = parameters.SideMode,
+            CreateCenterVent = parameters.CreateCenterVent,
+            ReliefFactorPercent = parameters.ReliefFactorPercent,
+            VentScalePercent = parameters.VentScalePercent,
+            CreatedUtc = previous?.CreatedUtc ?? now,
+            ModifiedUtc = now,
+            LastUsedUtc = previous?.LastUsedUtc ?? now
         };
-        _preset.Items.AddRange(new object[] { "Стандартный", "Компактный", "Усиленный", "Пользовательский" });
-        _preset.SelectedIndex = 0;
     }
 
-    private void PresetDrawItem(object? sender, DrawItemEventArgs e)
+    public void BindPresetData(
+        JointPresetCatalog catalog,
+        IReadOnlyList<JointTemplateDescriptor> templates,
+        string? selectedPresetId,
+        string selectedTemplateFileName) =>
+        _presetToolbar.Bind(catalog, templates, selectedPresetId, selectedTemplateFileName);
+
+    private void PresetSelectionChanged(object? sender, EventArgs e)
     {
-        if (e.Index < 0)
+        if (_presetToolbar.SelectedPreset is not JointPreset preset)
+        {
+            SelectedPresetChanged?.Invoke(this, EventArgs.Empty);
             return;
-
-        var selectedInOpenList = _preset.DroppedDown &&
-                                 (e.State & DrawItemState.Selected) != 0;
-        using var background = new SolidBrush(selectedInOpenList ? Accent : EditorBack);
-        e.Graphics.FillRectangle(background, e.Bounds);
-        TextRenderer.DrawText(
-            e.Graphics,
-            Convert.ToString(_preset.Items[e.Index]) ?? string.Empty,
-            _preset.Font,
-            new Rectangle(e.Bounds.X + 3, e.Bounds.Y, e.Bounds.Width - 5, e.Bounds.Height),
-            TextColor,
-            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-    }
-
-    private void PresetChanged(object? sender, EventArgs e)
-    {
-        if (_preset.Tag is not Dictionary<string, (double Width, double Height)> presets ||
-            _preset.SelectedItem is not string name || name == "Пользовательский" ||
-            !presets.TryGetValue(name, out var values))
-            return;
-
-        _applyingPreset = true;
-        _autoWidth.Checked = false;
-        _autoHeight.Checked = false;
-        _tenonWidth.Value = Math.Clamp((decimal)values.Width, _tenonWidth.Minimum, _tenonWidth.Maximum);
-        _tenonHeight.Value = Math.Clamp((decimal)values.Height, _tenonHeight.Minimum, _tenonHeight.Maximum);
-        _applyingPreset = false;
+        }
+        ApplyPreset(preset);
+        SelectedPresetChanged?.Invoke(this, EventArgs.Empty);
         ParametersChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void TemplateSelectionChanged(object? sender, EventArgs e)
+    {
+        SelectedTemplateChanged?.Invoke(this, EventArgs.Empty);
+        ParametersChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ApplyPreset(JointPreset preset)
+    {
+        _applyingPreset = true;
+        try
+        {
+            _presetToolbar.SelectTemplate(preset.TemplateFileName);
+            _tenonWidth.Value = Math.Clamp(
+                (decimal)preset.TenonWidthMm, _tenonWidth.Minimum, _tenonWidth.Maximum);
+            _tenonHeight.Value = Math.Clamp(
+                (decimal)preset.TenonHeightMm, _tenonHeight.Minimum, _tenonHeight.Maximum);
+            _autoWidth.Checked = preset.AutoTenonWidth;
+            _autoHeight.Checked = preset.AutoTenonHeight;
+            _tenonWidth.Enabled = !preset.AutoTenonWidth;
+            _tenonHeight.Enabled = !preset.AutoTenonHeight;
+            _clearance.Value = Math.Clamp(
+                (decimal)preset.ClearanceMm, _clearance.Minimum, _clearance.Maximum);
+            _sideA.Checked = preset.SideMode == JointSideMode.SideA;
+            _sideB.Checked = preset.SideMode == JointSideMode.SideB;
+            _bothSides.Checked = preset.SideMode == JointSideMode.Both;
+            _centerVent.Checked = preset.CreateCenterVent;
+            _reliefFactor.Value = Math.Clamp(
+                (decimal)preset.ReliefFactorPercent, _reliefFactor.Minimum, _reliefFactor.Maximum);
+            _ventScale.Value = Math.Clamp(
+                (decimal)preset.VentScalePercent, _ventScale.Minimum, _ventScale.Maximum);
+        }
+        finally { _applyingPreset = false; }
     }
 
     private static double CalculateAutomaticWidth(
@@ -414,6 +465,7 @@ internal sealed class JointPropertiesControl : UserControl
     {
         if (sender is RadioButton { Checked: true })
         {
+            if (_applyingPreset) return;
             SideModeChanged?.Invoke(this, EventArgs.Empty);
             ParametersChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -421,23 +473,20 @@ internal sealed class JointPropertiesControl : UserControl
 
     private void ParameterValueChanged(object? sender, EventArgs e)
     {
-        if (!_applyingPreset &&
-            (ReferenceEquals(sender, _tenonWidth) || ReferenceEquals(sender, _tenonHeight)) &&
-            _preset.SelectedItem is string name && name != "Пользовательский")
-            _preset.SelectedItem = "Пользовательский";
+        if (_applyingPreset) return;
         ParametersChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void JointOffsetValueChanged(object? sender, EventArgs e)
     {
-        ParameterValueChanged(sender, e);
+        ParametersChanged?.Invoke(this, EventArgs.Empty);
         if (!_settingManipulatorValues)
             JointOffsetEdited?.Invoke(this, EventArgs.Empty);
     }
 
     private void HoleOffsetValueChanged(object? sender, EventArgs e)
     {
-        ParameterValueChanged(sender, e);
+        ParametersChanged?.Invoke(this, EventArgs.Empty);
         if (!_settingManipulatorValues)
             HoleOffsetsEdited?.Invoke(this, EventArgs.Empty);
     }

@@ -35,7 +35,7 @@ internal enum JointInsertionMode
 
 internal sealed class TubeJointParameters
 {
-    public string PresetName { get; set; } = "Стандартный";
+    public string PresetName { get; set; } = string.Empty;
     public double TenonWidthMm { get; set; } = 20.0;
     public double TenonHeightMm { get; set; } = 22.0;
     public bool AutoTenonWidth { get; set; }

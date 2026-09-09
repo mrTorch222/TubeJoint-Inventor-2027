@@ -1,9 +1,9 @@
-# First test checklist — iteration 11
+# First test checklist — iteration 12
 
 Use disposable copies of the assembly and both IPT files.
 
 - [ ] Inventor 2027 was closed during install.
-- [ ] Package `iteration11-inventor-style-ui-v3` is shown by `build.ps1` and `install.ps1`.
+- [ ] Package `iteration12-user-presets-sketches-v1` is shown by `build.ps1` and `install.ps1`.
 - [ ] `build.ps1` completes without compiler errors.
 - [ ] `install.ps1` completes.
 - [ ] The **Шип-паз труб** panel appears on **Design** and no longer on Assemble.
@@ -13,7 +13,14 @@ Use disposable copies of the assembly and both IPT files.
 - [ ] On first use, the `Properties` panel is about 330 px wide and resembles Inventor's native vertical property panel.
 - [ ] The panel can be docked left or right, and its user-selected size/docking state survives reopening the command.
 - [ ] Panel, section, editor, text, and selection colors follow Inventor's active light or dark theme.
-- [ ] `Standard / Compact / Reinforced / Custom` presets change the manual dimensions.
+- [ ] The preset field starts with **Без пресета**; no built-in Standard/Compact/Reinforced presets are present.
+- [ ] After changing sizes and options, `+` saves the current state as a named user preset.
+- [ ] The blue gear menu can save, rename and delete the selected preset.
+- [ ] Preset sort order supports recent use, creation date, alphabetic order and modification date.
+- [ ] New-joint behavior supports last used, a selected default preset and no preset.
+- [ ] The second selector lists the base sketch and every user IPT variant in the Templates folder.
+- [ ] Sketch `+` creates a named copy; the edit button opens that selected IPT in Inventor.
+- [ ] Re-selecting a preset restores its dimensions, options and selected sketch together.
 - [ ] Width and height start in manual mode; Auto options are still available.
 - [ ] Switching A / B / A+B highlights the corresponding male tube walls.
 - [ ] A blue/green solid tenon preview and orange solid rectangular slot preview appear before pressing OK.
@@ -74,7 +81,7 @@ Use disposable copies of the assembly and both IPT files.
   starts from the edited value instead of the previous triad origin.
 
 If something fails, send the complete error text and one screenshot showing the selected members plus the model browser.
-# Итерация 11 — окно подготовки, распознавание и нормализация трубы
+# Итерация 12 — пользовательские пресеты, варианты эскизов и подготовка труб
 
 1. Откройте копию простой прямой профильной трубы IPT (одно solid-тело).
 2. На вкладке **Model**, панель **Подготовка труб**, нажмите **Подготовить трубы**.

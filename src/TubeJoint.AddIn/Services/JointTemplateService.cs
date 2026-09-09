@@ -12,9 +12,12 @@ internal sealed class JointTemplateService
     private readonly Inventor.Application _application;
     public JointTemplateService(Inventor.Application application) => _application = application;
 
-    public string TemplatePath => System.IO.Path.Combine(
+    public string TemplateDirectory => System.IO.Path.Combine(
         System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
-        "Autodesk", "Inventor 2027", "TubeJoint", "Templates", "StandardSideTenonSlot_v6.ipt");
+        "Autodesk", "Inventor 2027", "TubeJoint", "Templates");
+
+    public string TemplatePath => System.IO.Path.Combine(
+        TemplateDirectory, "StandardSideTenonSlot_v6.ipt");
 
     public string EnsureDefaultTemplate()
     {
@@ -36,6 +39,60 @@ internal sealed class JointTemplateService
         }
         finally { document.Close(true); }
         return TemplatePath;
+    }
+
+    public IReadOnlyList<JointTemplateDescriptor> ListTemplates()
+    {
+        _ = EnsureDefaultTemplate();
+        return System.IO.Directory.EnumerateFiles(TemplateDirectory, "*.ipt")
+            .Select(path =>
+            {
+                var isDefault = string.Equals(path, TemplatePath, StringComparison.OrdinalIgnoreCase);
+                return new JointTemplateDescriptor(
+                    System.IO.Path.GetFileName(path).ToLowerInvariant(),
+                    isDefault ? "Базовый профиль" : System.IO.Path.GetFileNameWithoutExtension(path),
+                    System.IO.Path.GetFileName(path),
+                    path);
+            })
+            .OrderBy(item => item.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+
+    public string EnsureTemplate(string path)
+    {
+        var fullPath = System.IO.Path.GetFullPath(path);
+        var fullDirectory = System.IO.Path.GetFullPath(TemplateDirectory) + System.IO.Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(fullDirectory, StringComparison.OrdinalIgnoreCase) ||
+            !System.IO.File.Exists(fullPath))
+            throw new InvalidOperationException("Выбранный вариант эскиза не найден в папке TubeJoint Templates.");
+        EnsureTemplateSchema(fullPath);
+        return fullPath;
+    }
+
+    public JointTemplateDescriptor CreateTemplateVariant(string displayName, string sourcePath)
+    {
+        var safeName = displayName.Trim();
+        foreach (var invalid in System.IO.Path.GetInvalidFileNameChars())
+            safeName = safeName.Replace(invalid, '_');
+        if (string.IsNullOrWhiteSpace(safeName))
+            throw new InvalidOperationException("Введите имя варианта эскиза.");
+
+        var source = EnsureTemplate(sourcePath);
+        foreach (Document openDocument in _application.Documents)
+            if (string.Equals(openDocument.FullFileName, source, StringComparison.OrdinalIgnoreCase) &&
+                openDocument.Dirty)
+                throw new InvalidOperationException(
+                    "Сначала сохраните изменения текущего эскиза, затем создайте его вариант.");
+
+        var target = System.IO.Path.Combine(TemplateDirectory, safeName + ".ipt");
+        if (System.IO.File.Exists(target))
+            throw new InvalidOperationException($"Вариант эскиза '{safeName}' уже существует.");
+        System.IO.File.Copy(source, target, false);
+        return new JointTemplateDescriptor(
+            System.IO.Path.GetFileName(target).ToLowerInvariant(),
+            safeName,
+            System.IO.Path.GetFileName(target),
+            target);
     }
 
     public void ApplyParameters(PartDocument document, TubeJointParameters values)
@@ -88,9 +145,11 @@ internal sealed class JointTemplateService
         }
     }
 
-    public void OpenTemplateForEditing()
+    public void OpenTemplateForEditing(string? templatePath = null)
     {
-        var path = EnsureDefaultTemplate();
+        var path = templatePath is null
+            ? EnsureDefaultTemplate()
+            : EnsureTemplate(templatePath);
         foreach (Document document in _application.Documents)
         {
             if (!string.Equals(document.FullFileName, path, StringComparison.OrdinalIgnoreCase)) continue;
@@ -100,9 +159,11 @@ internal sealed class JointTemplateService
         _application.Documents.Open(path, true);
     }
 
-    public JointStandardSettings LoadSettings()
+    public JointStandardSettings LoadSettings(string? templatePath = null)
     {
-        var path = EnsureDefaultTemplate();
+        var path = templatePath is null
+            ? EnsureDefaultTemplate()
+            : EnsureTemplate(templatePath);
         PartDocument? document = null;
         var openedHere = false;
         foreach (Document openDocument in _application.Documents)
@@ -127,15 +188,12 @@ internal sealed class JointTemplateService
                 AutoWidthMinimumMm = Millimeters(parameters, "TJ_AutoWidthMinimum"),
                 AutoWidthMaximumMm = Millimeters(parameters, "TJ_AutoWidthMaximum"),
                 AutoHeightFactor = Unitless(parameters, "TJ_AutoHeightFactor"),
-                DimensionStepMm = Millimeters(parameters, "TJ_DimensionStep"),
-                CompactPresetFactor = Unitless(parameters, "TJ_PresetCompactFactor"),
-                ReinforcedPresetFactor = Unitless(parameters, "TJ_PresetReinforcedFactor")
+                DimensionStepMm = Millimeters(parameters, "TJ_DimensionStep")
             };
             if (settings.AutoWidthFactor <= 0 || settings.AutoHeightFactor <= 0 ||
                 settings.AutoWidthMinimumMm <= 0 ||
                 settings.AutoWidthMaximumMm < settings.AutoWidthMinimumMm ||
-                settings.DimensionStepMm <= 0 || settings.CompactPresetFactor <= 0 ||
-                settings.ReinforcedPresetFactor <= 0)
+                settings.DimensionStepMm <= 0)
                 throw new InvalidOperationException(
                     "Параметры правила TJ_Auto* в шаблоне имеют недопустимые значения.");
             return settings;
@@ -410,10 +468,10 @@ internal sealed class JointTemplateService
         for (var i = 0; i < points.Count; i++)
             sketch.SketchLines.AddByTwoPoints(points[i], points[(i + 1) % points.Count]);
     }
-    private static void AddLength(UserParameters p,string n,string e,string c)
-    { var x=p.AddByExpression(n,e,UnitsTypeEnum.kMillimeterLengthUnits); x.Comment=c; }
-    private static void AddUnitless(UserParameters p,string n,string e,string c)
-    { var x=p.AddByExpression(n,e,UnitsTypeEnum.kUnitlessUnits); x.Comment=c; }
+    private static void AddLength(UserParameters p, string n, string e, string c)
+    { var x = p.AddByExpression(n, e, UnitsTypeEnum.kMillimeterLengthUnits); x.Comment = c; }
+    private static void AddUnitless(UserParameters p, string n, string e, string c)
+    { var x = p.AddByExpression(n, e, UnitsTypeEnum.kUnitlessUnits); x.Comment = c; }
     private static double Millimeters(UserParameters p, string name) =>
         Convert.ToDouble(p[name].Value) * 10.0;
     private static double Unitless(UserParameters p, string name) =>

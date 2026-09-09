@@ -22,6 +22,11 @@ internal sealed class NativeJointInput : IDisposable
     private readonly DockableWindowsEvents _windowEvents;
     private readonly JointPreviewService _preview;
     private readonly JointManipulatorService _manipulator;
+    private readonly JointTemplateService _templates;
+    private readonly JointPresetStore _presetStore;
+    private JointPresetCatalog _presetCatalog;
+    private IReadOnlyList<JointTemplateDescriptor> _templateDescriptors;
+    private string _templatePath;
     private readonly System.Windows.Forms.Timer _previewTimer;
     private ManipulatorMode _manipulatorMode;
     private bool _changingHoleToggle;
@@ -33,11 +38,21 @@ internal sealed class NativeJointInput : IDisposable
         AssemblyDocument assembly,
         JointPairSelection selection,
         JointStandardSettings settings,
-        JointTemplateService templates)
+        JointTemplateService templates,
+        JointPresetStore presetStore,
+        JointPresetCatalog presetCatalog,
+        IReadOnlyList<JointTemplateDescriptor> templateDescriptors,
+        JointPreset? initialPreset,
+        JointTemplateDescriptor initialTemplate)
     {
         _application = application;
         _selection = selection;
-        _preview = new JointPreviewService(application, assembly, templates);
+        _templates = templates;
+        _presetStore = presetStore;
+        _presetCatalog = presetCatalog;
+        _templateDescriptors = templateDescriptors;
+        _templatePath = initialTemplate.FullPath;
+        _preview = new JointPreviewService(application, assembly, templates, _templatePath);
         _manipulator = new JointManipulatorService(application);
         _previewTimer = new System.Windows.Forms.Timer { Interval = 80 };
         _previewTimer.Tick += PreviewTimerOnTick;
@@ -71,7 +86,9 @@ internal sealed class NativeJointInput : IDisposable
         }
 
         InventorThemePalette.Refresh(application);
-        _control = new JointPropertiesControl(selection, settings);
+        _control = new JointPropertiesControl(
+            selection, settings, presetCatalog, templateDescriptors,
+            initialPreset, initialTemplate.FileName);
         _control.CreateControl();
         _control.Accepted += OnAccepted;
         _control.Cancelled += OnCancelled;
@@ -81,6 +98,16 @@ internal sealed class NativeJointInput : IDisposable
         _control.JointOffsetEdited += OnJointOffsetEdited;
         _control.HoleOffsetsEdited += OnHoleOffsetsEdited;
         _control.HoleManipulatorRequested += OnHoleManipulatorRequested;
+        _control.SavePresetAsRequested += OnSavePresetAsRequested;
+        _control.SavePresetRequested += OnSavePresetRequested;
+        _control.RenamePresetRequested += OnRenamePresetRequested;
+        _control.DeletePresetRequested += OnDeletePresetRequested;
+        _control.CreateTemplateRequested += OnCreateTemplateRequested;
+        _control.EditTemplateRequested += OnEditTemplateRequested;
+        _control.SelectedTemplateChanged += OnSelectedTemplateChanged;
+        _control.SelectedPresetChanged += OnSelectedPresetChanged;
+        _control.SortOrderRequested += OnSortOrderRequested;
+        _control.StartupModeRequested += OnStartupModeRequested;
         _window.AddChild(_control.Handle);
         _window.ShowVisibilityCheckBox = false;
         _window.DisabledDockingStates =
@@ -98,7 +125,7 @@ internal sealed class NativeJointInput : IDisposable
         _windowEvents.OnHide += OnWindowHidden;
     }
 
-    public event Action<TubeJointParameters, JointPairSelection>? Accepted;
+    public event Action<TubeJointParameters, JointPairSelection, string>? Accepted;
     public event Action? Cancelled;
 
     public void Show()
@@ -130,6 +157,16 @@ internal sealed class NativeJointInput : IDisposable
         _control.JointOffsetEdited -= OnJointOffsetEdited;
         _control.HoleOffsetsEdited -= OnHoleOffsetsEdited;
         _control.HoleManipulatorRequested -= OnHoleManipulatorRequested;
+        _control.SavePresetAsRequested -= OnSavePresetAsRequested;
+        _control.SavePresetRequested -= OnSavePresetRequested;
+        _control.RenamePresetRequested -= OnRenamePresetRequested;
+        _control.DeletePresetRequested -= OnDeletePresetRequested;
+        _control.CreateTemplateRequested -= OnCreateTemplateRequested;
+        _control.EditTemplateRequested -= OnEditTemplateRequested;
+        _control.SelectedTemplateChanged -= OnSelectedTemplateChanged;
+        _control.SelectedPresetChanged -= OnSelectedPresetChanged;
+        _control.SortOrderRequested -= OnSortOrderRequested;
+        _control.StartupModeRequested -= OnStartupModeRequested;
         try { _windowEvents.OnHide -= OnWindowHidden; } catch { }
         _previewTimer.Stop();
         _previewTimer.Tick -= PreviewTimerOnTick;
@@ -150,7 +187,7 @@ internal sealed class NativeJointInput : IDisposable
         var selectedPair = _selection;
         _control.BeginInvoke(new Action(() =>
         {
-            if (!_disposed) Accepted?.Invoke(parameters, selectedPair);
+            if (!_disposed) Accepted?.Invoke(parameters, selectedPair, _templatePath);
         }));
     }
 
@@ -163,6 +200,183 @@ internal sealed class NativeJointInput : IDisposable
             if (!_disposed) Cancelled?.Invoke();
         }));
     }
+
+    private void OnSavePresetAsRequested(object? sender, EventArgs e)
+    {
+        var name = TextPromptDialog.Show(
+            "Новый пресет", "Имя пресета:");
+        if (name is null) return;
+        if (_presetCatalog.Presets.Any(item =>
+                string.Equals(item.Name, name, StringComparison.CurrentCultureIgnoreCase)))
+        {
+            ShowPresetError($"Пресет '{name}' уже существует.");
+            return;
+        }
+
+        var preset = _control.CapturePreset(name, _selection);
+        _presetCatalog.Presets.Add(preset);
+        _presetCatalog.LastUsedPresetId = preset.Id;
+        SavePresetCatalog();
+        RefreshPresetData(preset.Id);
+    }
+
+    private void OnSavePresetRequested(object? sender, EventArgs e)
+    {
+        if (_control.SelectedPreset is not JointPreset selected) return;
+        var replacement = _control.CapturePreset(selected.Name, _selection, selected.Id);
+        ReplacePreset(replacement);
+        SavePresetCatalog();
+        RefreshPresetData(replacement.Id);
+    }
+
+    private void OnRenamePresetRequested(object? sender, EventArgs e)
+    {
+        if (_control.SelectedPreset is not JointPreset selected) return;
+        var name = TextPromptDialog.Show(
+            "Переименовать пресет", "Новое имя:", selected.Name);
+        if (name is null || string.Equals(name, selected.Name, StringComparison.Ordinal)) return;
+        if (_presetCatalog.Presets.Any(item => item.Id != selected.Id &&
+                string.Equals(item.Name, name, StringComparison.CurrentCultureIgnoreCase)))
+        {
+            ShowPresetError($"Пресет '{name}' уже существует.");
+            return;
+        }
+
+        var renamed = selected with { Name = name, ModifiedUtc = DateTimeOffset.UtcNow };
+        ReplacePreset(renamed);
+        SavePresetCatalog();
+        RefreshPresetData(renamed.Id);
+    }
+
+    private void OnDeletePresetRequested(object? sender, EventArgs e)
+    {
+        if (_control.SelectedPreset is not JointPreset selected) return;
+        var answer = System.Windows.Forms.MessageBox.Show(
+            $"Удалить пресет '{selected.Name}'?\nЭскиз IPT удалён не будет.",
+            "Пресеты шип-паза",
+            System.Windows.Forms.MessageBoxButtons.YesNo,
+            System.Windows.Forms.MessageBoxIcon.Question,
+            System.Windows.Forms.MessageBoxDefaultButton.Button2);
+        if (answer != System.Windows.Forms.DialogResult.Yes) return;
+
+        _presetCatalog.Presets.RemoveAll(item => item.Id == selected.Id);
+        if (_presetCatalog.DefaultPresetId == selected.Id)
+        {
+            _presetCatalog.DefaultPresetId = null;
+            _presetCatalog.StartupMode = JointPresetStartupMode.NoPreset;
+        }
+        if (_presetCatalog.LastUsedPresetId == selected.Id)
+            _presetCatalog.LastUsedPresetId = null;
+        SavePresetCatalog();
+        RefreshPresetData(null);
+    }
+
+    private void OnSortOrderRequested(JointPresetSortOrder order)
+    {
+        _presetCatalog.SortOrder = order;
+        var selectedId = _control.SelectedPreset?.Id;
+        SavePresetCatalog();
+        RefreshPresetData(selectedId);
+    }
+
+    private void OnStartupModeRequested(JointPresetStartupMode mode)
+    {
+        if (mode == JointPresetStartupMode.SpecificPreset &&
+            _control.SelectedPreset is not JointPreset selected)
+        {
+            ShowPresetError("Сначала выберите пресет.");
+            return;
+        }
+        _presetCatalog.StartupMode = mode;
+        _presetCatalog.DefaultPresetId = mode == JointPresetStartupMode.SpecificPreset
+            ? _control.SelectedPreset?.Id
+            : null;
+        SavePresetCatalog();
+        RefreshPresetData(_control.SelectedPreset?.Id);
+    }
+
+    private void OnSelectedPresetChanged(object? sender, EventArgs e)
+    {
+        if (_control.SelectedPreset is not JointPreset selected) return;
+        var used = selected with { LastUsedUtc = DateTimeOffset.UtcNow };
+        ReplacePreset(used);
+        _presetCatalog.LastUsedPresetId = used.Id;
+        SavePresetCatalog();
+    }
+
+    private void OnSelectedTemplateChanged(object? sender, EventArgs e)
+    {
+        if (_control.SelectedTemplate is not JointTemplateDescriptor selected) return;
+        try
+        {
+            _templatePath = _templates.EnsureTemplate(selected.FullPath);
+            _preview.SelectTemplate(_templatePath);
+        }
+        catch (Exception exception)
+        {
+            ShowPresetError(exception.Message);
+            RefreshPresetData(
+                _control.SelectedPreset?.Id, System.IO.Path.GetFileName(_templatePath));
+        }
+    }
+
+    private void OnCreateTemplateRequested(object? sender, EventArgs e)
+    {
+        if (_control.SelectedTemplate is not JointTemplateDescriptor source) return;
+        var name = TextPromptDialog.Show(
+            "Новый вариант эскиза", "Имя варианта:", source.DisplayName + " копия");
+        if (name is null) return;
+        try
+        {
+            var created = _templates.CreateTemplateVariant(name, source.FullPath);
+            _templateDescriptors = _templates.ListTemplates();
+            _templatePath = created.FullPath;
+            _preview.SelectTemplate(_templatePath);
+            _control.BindPresetData(
+                _presetCatalog, _templateDescriptors, null, created.FileName);
+            _templates.OpenTemplateForEditing(created.FullPath);
+        }
+        catch (Exception exception)
+        {
+            ShowPresetError(exception.Message);
+        }
+    }
+
+    private void OnEditTemplateRequested(object? sender, EventArgs e)
+    {
+        if (_control.SelectedTemplate is not JointTemplateDescriptor selected) return;
+        try { _templates.OpenTemplateForEditing(selected.FullPath); }
+        catch (Exception exception) { ShowPresetError(exception.Message); }
+    }
+
+    private void ReplacePreset(JointPreset replacement)
+    {
+        var index = _presetCatalog.Presets.FindIndex(item => item.Id == replacement.Id);
+        if (index >= 0) _presetCatalog.Presets[index] = replacement;
+        else _presetCatalog.Presets.Add(replacement);
+    }
+
+    private void RefreshPresetData(
+        string? selectedPresetId,
+        string? templateFileNameOverride = null)
+    {
+        var templateFileName = templateFileNameOverride ?? _control.SelectedTemplate?.FileName ??
+                               System.IO.Path.GetFileName(_templatePath);
+        _control.BindPresetData(
+            _presetCatalog, _templateDescriptors, selectedPresetId, templateFileName);
+    }
+
+    private void SavePresetCatalog()
+    {
+        try { _presetStore.Save(_presetCatalog); }
+        catch (Exception exception) { ShowPresetError(exception.Message); }
+    }
+
+    private static void ShowPresetError(string message) =>
+        System.Windows.Forms.MessageBox.Show(
+            message, "Пресеты шип-паза",
+            System.Windows.Forms.MessageBoxButtons.OK,
+            System.Windows.Forms.MessageBoxIcon.Error);
 
     private void OnWindowHidden(
         DockableWindow window,

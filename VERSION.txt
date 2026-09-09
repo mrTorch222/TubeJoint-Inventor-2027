@@ -1,11 +1,11 @@
 TubeJoint for Autodesk Inventor 2027
-Iteration: 11
-Package: iteration11-inventor-style-ui-v3
-Template file: StandardSideTenonSlot_v6.ipt (preserved in place)
+Iteration: 12
+Package: iteration12-user-presets-sketches-v1
+Template files: multiple user-selectable IPT variants; StandardSideTenonSlot_v6.ipt preserved as the base profile
 Template schema: 10, migrated by adding missing TJ_* parameters only
 Ribbon tab: Design (id_TabDesign)
 Window: floating Inventor DockableWindow, 620 x 790; no forced docking
-Sizing workflow: Standard / Compact / Reinforced / Custom presets
+Sizing workflow: configure current joint, then save/update a named user preset
 Auto sizing: retained but disabled by default
 Slot thickness: measured automatically from the male tube; no redundant UI row
 Profile mode: solved tenon/slot sketches copied 1:1; no external X/Y/root scaling
@@ -60,6 +60,10 @@ High-DPI sizing: child control no longer doubles the DockableWindow minimum widt
 Segment controls: owner-drawn selected state retains the Inventor blue accent
 Pane migration: V7 resets the oversized V6 geometry once, then preserves new user sizing
 Preset control: focused closed value keeps the native dark editor background
+Preset storage: JSON catalog in %APPDATA%/Autodesk/Inventor 2027/TubeJoint/Presets
+Preset contents: sizes, auto modes, clearance, sides, vent options, reliefs and selected sketch IPT
+Preset menu: save, rename, delete, sort order and new-joint default behavior
+Sketch variants: every IPT in the TubeJoint Templates folder is selectable; + copies the current variant
 Cancel: DockableWindow X stops triads/timer, deletes stale preview graphics and resets the command
 Undo: failed global transactions are always aborted; template working values are restored without save
 Auto slot thickness: measured male-wall value bypasses manual standard-step validation

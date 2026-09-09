@@ -12,6 +12,7 @@ internal sealed class CreateTubeJointCommand : IDisposable
     private readonly OccurrenceSelectionService _selection;
     private readonly FrameTrimService _trim;
     private readonly JointTemplateService _templates;
+    private readonly JointPresetStore _presetStore;
     private readonly JointRepository _repository;
     private readonly IJointGeometryBuilder _geometry;
     private NativeJointInput? _activeInput;
@@ -26,6 +27,7 @@ internal sealed class CreateTubeJointCommand : IDisposable
         _selection = new OccurrenceSelectionService(application);
         _trim = new FrameTrimService(application);
         _templates = new JointTemplateService(application);
+        _presetStore = new JointPresetStore();
         _repository = new JointRepository();
         _geometry = new TemplateProfileGeometryBuilder(application, _templates);
     }
@@ -47,11 +49,21 @@ internal sealed class CreateTubeJointCommand : IDisposable
             if (!_trim.CanContinueOrLaunchTrim(assembly, selection)) return;
 
             var templatePath = _templates.EnsureDefaultTemplate();
-            var settings = _templates.LoadSettings();
-            var input = new NativeJointInput(_application, assembly, selection, settings, _templates);
+            var templateDescriptors = _templates.ListTemplates();
+            var presetCatalog = _presetStore.Load();
+            var initialPreset = JointPresetStore.StartupPreset(presetCatalog);
+            var initialTemplate = templateDescriptors.FirstOrDefault(item =>
+                    string.Equals(item.FileName, initialPreset?.TemplateFileName,
+                        StringComparison.OrdinalIgnoreCase))
+                ?? templateDescriptors.First(item =>
+                    string.Equals(item.FullPath, templatePath, StringComparison.OrdinalIgnoreCase));
+            var settings = _templates.LoadSettings(initialTemplate.FullPath);
+            var input = new NativeJointInput(
+                _application, assembly, selection, settings, _templates,
+                _presetStore, presetCatalog, templateDescriptors, initialPreset, initialTemplate);
             _activeAssembly = assembly;
             _activeSelection = selection;
-            _activeTemplatePath = templatePath;
+            _activeTemplatePath = initialTemplate.FullPath;
             _activeInput = input;
             input.Accepted += InputOnAccepted;
             input.Cancelled += InputOnCancelled;
@@ -71,7 +83,10 @@ internal sealed class CreateTubeJointCommand : IDisposable
 
     public void Dispose() => CloseActiveInput();
 
-    private void InputOnAccepted(TubeJointParameters parameters, JointPairSelection selectedPair)
+    private void InputOnAccepted(
+        TubeJointParameters parameters,
+        JointPairSelection selectedPair,
+        string selectedTemplatePath)
     {
         if (_creating || _activeAssembly is null || _activeSelection is null ||
             string.IsNullOrWhiteSpace(_activeTemplatePath)) return;
@@ -88,7 +103,7 @@ internal sealed class CreateTubeJointCommand : IDisposable
 
         var assembly = _activeAssembly;
         var selection = selectedPair;
-        var templatePath = _activeTemplatePath;
+        var templatePath = selectedTemplatePath;
         _creating = true;
         CloseActiveInput();
         try

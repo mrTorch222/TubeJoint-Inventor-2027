@@ -29,7 +29,9 @@ internal sealed class TemplateProfileGeometryBuilder : IJointGeometryBuilder
 
     public void CreateOrUpdate(AssemblyDocument assembly, JointPairSelection selection, JointPairRecord record)
     {
-        var templatePath = _templates.EnsureDefaultTemplate();
+        var templatePath = string.IsNullOrWhiteSpace(record.TemplatePath)
+            ? _templates.EnsureDefaultTemplate()
+            : _templates.EnsureTemplate(record.TemplatePath);
         PartDocument? template = null;
         var openedHere = false;
         foreach (Document openDocument in _application.Documents)
