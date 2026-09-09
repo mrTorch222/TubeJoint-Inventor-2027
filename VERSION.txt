@@ -1,6 +1,6 @@
 TubeJoint for Autodesk Inventor 2027
-Iteration: 9
-Package: iteration9-v31
+Iteration: 10
+Package: iteration10-tube-recognition-v5
 Template file: StandardSideTenonSlot_v6.ipt (preserved in place)
 Template schema: 10, migrated by adding missing TJ_* parameters only
 Ribbon tab: Design (id_TabDesign)
@@ -42,6 +42,16 @@ Paired root bridge: opposite sides use the same maximum measured Trim/Notch gap 
 Angled joints: selected female-face-normal insertion direction retained
 Repository schema: 12
 UI: Icon.png with five inline editors; no spinner rectangles; compact hole controls
+Tube recognition: straight rectangular and round hollow profiles from analytical B-Rep geometry
+Round/RHS classification: round profiles require full-section diameter and coaxial inner/outer cylinders
+Assembly batch: all unique recognized tube IPTs are normalized in one global transaction
+Assembly preservation: every occurrence gets T_old * inverse(normalization); range boxes are verified to 0.05 mm
+Tube file naming: optional SIZE x WALL_OLD-NAME_QUANTITY шт.ipt
+Nominal formatting: section and wall rounded to 0.1 mm; trailing decimal zero omitted
+Rename safety: IAM references switch through SaveAs; original IPT files remain as backups
+Tube properties: Description/Stock Number plus stable TubeJoint.* custom iProperties
+Tube normalization: OBB centre to origin; length/width/height aligned to +Z/+X/+Y by one Move feature
+Recognition safety: exactly one writable solid body, hollow-profile validation and explicit confirmation
 Cancel: DockableWindow X stops triads/timer, deletes stale preview graphics and resets the command
 Undo: failed global transactions are always aborted; template working values are restored without save
 Auto slot thickness: measured male-wall value bypasses manual standard-step validation

@@ -1,9 +1,9 @@
-# First test checklist — iteration 9
+# First test checklist — iteration 10
 
 Use disposable copies of the assembly and both IPT files.
 
 - [ ] Inventor 2027 was closed during install.
-- [ ] Package `iteration9-v31` is shown by `build.ps1` and `install.ps1`.
+- [ ] Package `iteration10-tube-recognition-v2` is shown by `build.ps1` and `install.ps1`.
 - [ ] `build.ps1` completes without compiler errors.
 - [ ] `install.ps1` completes.
 - [ ] The **Шип-паз труб** panel appears on **Design** and no longer on Assemble.
@@ -71,3 +71,26 @@ Use disposable copies of the assembly and both IPT files.
   starts from the edited value instead of the previous triad origin.
 
 If something fails, send the complete error text and one screenshot showing the selected members plus the model browser.
+# Итерация 10 — распознавание и нормализация трубы
+
+1. Откройте копию простой прямой профильной трубы IPT (одно solid-тело).
+2. На вкладке **Model**, панель **Подготовка труб**, нажмите **Подготовить трубы**.
+3. Сверьте показанные ширину, высоту, стенку и длину, затем подтвердите изменение.
+4. Проверьте iProperties: `Description`, `Stock Number` и пользовательские
+   `TubeJoint.Profile`, `TubeJoint.LengthMm`, `TubeJoint.WallThicknessMm`.
+5. Проверьте, что центр тела находится в `(0,0,0)`, продольная ось идёт по `+Z`,
+   а стороны сечения — по `+X/+Y`.
+6. Нажмите Undo один раз: операция `TJ_NORMALIZE_TUBE` и iProperties должны
+   вернуться к исходному состоянию.
+7. В копии IAM нажмите **Подготовить трубы**: команда должна обработать все
+   уникальные трубы без последовательного ручного выбора.
+8. До и после операции измерьте положение нескольких вхождений в IAM. Их мировые
+   габариты должны совпасть в пределах 0,05 мм, а тела внутри IPT должны оказаться
+   по центру и вдоль локальных осей XYZ.
+9. Отдельно проверьте отказ на solid-прутке и детали с несколькими solid-телами.
+10. Для IPT `Стойка левая.ipt` размера 40×20×1,5 мм с 6 вхождениями проверьте
+    имя `40x20x1,5_Стойка левая_6 шт.ipt`; ссылка IAM должна указывать на новый файл.
+11. Повторите команду с ответом **Нет** в окне подтверждения: координаты и
+    iProperties должны обновиться, а имена файлов — остаться прежними.
+9. Проверьте квадратную трубу со скруглёнными углами: угловые цилиндрические
+   грани не должны приводить к распознаванию круглой трубы.
