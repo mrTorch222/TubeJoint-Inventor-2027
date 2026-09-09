@@ -3,7 +3,7 @@
 Use disposable copies of the assembly and both IPT files.
 
 - [ ] Inventor 2027 was closed during install.
-- [ ] Package `iteration11-inventor-style-ui-v1` is shown by `build.ps1` and `install.ps1`.
+- [ ] Package `iteration11-inventor-style-ui-v2` is shown by `build.ps1` and `install.ps1`.
 - [ ] `build.ps1` completes without compiler errors.
 - [ ] `install.ps1` completes.
 - [ ] The **Шип-паз труб** panel appears on **Design** and no longer on Assemble.

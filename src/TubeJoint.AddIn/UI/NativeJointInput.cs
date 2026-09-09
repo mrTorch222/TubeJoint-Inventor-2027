@@ -91,7 +91,7 @@ internal sealed class NativeJointInput : IDisposable
         {
             _window.SetDockingState(DockingStateEnum.kFloat);
             _window.Width = 330;
-            _window.Height = 720;
+            _window.Height = 680;
         }
         _windowEvents = windows.Events;
         _windowEvents.OnHide += OnWindowHidden;

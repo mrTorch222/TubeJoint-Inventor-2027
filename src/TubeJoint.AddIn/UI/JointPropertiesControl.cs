@@ -73,7 +73,10 @@ internal sealed class JointPropertiesControl : UserControl
         Font = new Font("Segoe UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point);
         Dock = DockStyle.Fill;
         AutoScroll = true;
-        MinimumSize = new Size(285, 560);
+        // The Inventor pane owns minimum sizing. A WinForms MinimumSize is DPI
+        // scaled a second time when hosted by DockableWindow and made the pane
+        // almost twice as wide on 150-175% Windows scaling.
+        MinimumSize = Size.Empty;
 
         _root = new TableLayoutPanel
         {
@@ -588,7 +591,7 @@ internal sealed class JointPropertiesControl : UserControl
 
     private static RadioButton SideButton(string text)
     {
-        var button = new RadioButton
+        var button = new InventorSegmentButton
         {
             Text = text,
             Appearance = Appearance.Button,
@@ -657,6 +660,56 @@ internal sealed class JointPropertiesControl : UserControl
         button.FlatAppearance.BorderColor = Border;
         return button;
     }
+}
+
+/// <summary>Owner-drawn segment that does not turn white on focus/high DPI.</summary>
+internal sealed class InventorSegmentButton : RadioButton
+{
+    public InventorSegmentButton()
+    {
+        SetStyle(ControlStyles.UserPaint |
+                 ControlStyles.AllPaintingInWmPaint |
+                 ControlStyles.OptimizedDoubleBuffer, true);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var palette = InventorThemePalette.Current;
+        var background = Checked ? palette.Accent : palette.EditorBack;
+        if (!Enabled)
+            background = Mix(background, palette.PanelBack);
+
+        e.Graphics.Clear(background);
+        using var border = new Pen(palette.Border);
+        e.Graphics.DrawRectangle(border, 0, 0, Math.Max(0, Width - 1), Math.Max(0, Height - 1));
+        TextRenderer.DrawText(
+            e.Graphics,
+            Text,
+            Font,
+            ClientRectangle,
+            Enabled ? palette.TextColor : palette.MutedText,
+            TextFormatFlags.HorizontalCenter |
+            TextFormatFlags.VerticalCenter |
+            TextFormatFlags.EndEllipsis |
+            TextFormatFlags.NoPadding);
+    }
+
+    protected override void OnCheckedChanged(EventArgs e)
+    {
+        base.OnCheckedChanged(e);
+        Invalidate();
+    }
+
+    protected override void OnEnabledChanged(EventArgs e)
+    {
+        base.OnEnabledChanged(e);
+        Invalidate();
+    }
+
+    private static Color Mix(Color first, Color second) => Color.FromArgb(
+        (first.R + second.R) / 2,
+        (first.G + second.G) / 2,
+        (first.B + second.B) / 2);
 }
 
 /// <summary>An Inventor-like parameter image with editable values placed on its leaders.</summary>
