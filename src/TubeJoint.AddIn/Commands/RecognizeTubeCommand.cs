@@ -1,7 +1,7 @@
 using System.Windows.Forms;
 using Inventor;
-using TubeJoint.AddIn.Models;
 using TubeJoint.AddIn.Services;
+using TubeJoint.AddIn.TubeAnalysis;
 using IOFile = System.IO.File;
 using IOPath = System.IO.Path;
 
@@ -10,12 +10,14 @@ namespace TubeJoint.AddIn.Commands;
 internal sealed class RecognizeTubeCommand
 {
     private readonly Inventor.Application _application;
-    private readonly TubeRecognitionService _recognition;
+    private readonly ITubeAnalyzer _tubeAnalyzer;
+    private readonly TubePreparationService _preparation;
 
     public RecognizeTubeCommand(Inventor.Application application)
     {
         _application = application;
-        _recognition = new TubeRecognitionService(application);
+        _tubeAnalyzer = new CachedTubeAnalyzer(new GenericSolidTubeAnalyzer());
+        _preparation = new TubePreparationService(application);
     }
 
     public void Execute()
@@ -26,7 +28,7 @@ internal sealed class RecognizeTubeCommand
             var context = GetTargets();
             var renamePlans = BuildRenamePlans(context.Targets);
             var lines = renamePlans.Take(8)
-                .Select(plan => $"• {plan.Target.Result.Document.DisplayName} → " +
+                .Select(plan => $"• {plan.Target.Document.DisplayName} → " +
                                 IOPath.GetFileName(plan.TargetPath))
                 .ToList();
             if (renamePlans.Count > lines.Count)
@@ -54,15 +56,15 @@ internal sealed class RecognizeTubeCommand
                     (Inventor._Document)context.Assembly,
                     "TubeJoint: нормализовать все трубы")
                 : _application.TransactionManager.StartTransaction(
-                    (Inventor._Document)context.Targets[0].Result.Document,
+                    (Inventor._Document)context.Targets[0].Document,
                     "TubeJoint: распознать и нормализовать трубу");
 
             var snapshots = CaptureOccurrences(context.Targets);
             var movedCount = 0;
             foreach (var target in context.Targets)
             {
-                var normalization = _recognition.CreateNormalizationTransform(target.Result);
-                if (!_recognition.NormalizeAndWriteProperties(target.Result)) continue;
+                var normalization = _preparation.CreateNormalizationTransform(target.Analysis);
+                if (!_preparation.NormalizeAndWriteProperties(target.Document, target.Analysis)) continue;
                 movedCount++;
                 CompensateOccurrences(target.Occurrences, normalization);
             }
@@ -102,7 +104,7 @@ internal sealed class RecognizeTubeCommand
     {
         if (_application.ActiveDocument is PartDocument part)
             return new RecognitionContext(null,
-                new List<TubeTarget> { new(_recognition.Analyze(part), new List<ComponentOccurrence>()) });
+                new List<TubeTarget> { new(part, _tubeAnalyzer.Analyze(part), new List<ComponentOccurrence>()) });
         if (_application.ActiveDocument is not AssemblyDocument assembly)
             throw new InvalidOperationException("Откройте деталь IPT или сборку IAM.");
 
@@ -115,9 +117,9 @@ internal sealed class RecognizeTubeCommand
             var occurrences = group.ToList();
             try
             {
-                var result = _recognition.Analyze(
-                    OccurrenceSelectionService.GetPartDocument(occurrences[0]));
-                targets.Add(new TubeTarget(result, occurrences));
+                var document = OccurrenceSelectionService.GetPartDocument(occurrences[0]);
+                if (!document.IsModifiable) continue;
+                targets.Add(new TubeTarget(document, _tubeAnalyzer.Analyze(document), occurrences));
             }
             catch
             {
@@ -156,13 +158,13 @@ internal sealed class RecognizeTubeCommand
     private static List<RenamePlan> BuildRenamePlans(IReadOnlyList<TubeTarget> targets)
     {
         foreach (var target in targets)
-            if (string.IsNullOrWhiteSpace(target.Result.Document.FullFileName))
+            if (string.IsNullOrWhiteSpace(target.Document.FullFileName))
                 throw new InvalidOperationException(
-                    $"Сначала сохраните деталь на диск: {target.Result.Document.DisplayName}");
+                    $"Сначала сохраните деталь на диск: {target.Document.DisplayName}");
 
         var plans = new List<RenamePlan>();
         var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var target in targets.OrderBy(item => item.Result.Document.FullFileName,
+        foreach (var target in targets.OrderBy(item => item.Document.FullFileName,
                      StringComparer.OrdinalIgnoreCase))
         {
             var suffix = 1;
@@ -171,30 +173,30 @@ internal sealed class RecognizeTubeCommand
             {
                 var fileName = BuildTubeFileName(target, suffix++);
                 targetPath = IOPath.Combine(
-                    IOPath.GetDirectoryName(target.Result.Document.FullFileName)!, fileName);
+                    IOPath.GetDirectoryName(target.Document.FullFileName)!, fileName);
             }
             while (reserved.Contains(targetPath) ||
                    (IOFile.Exists(targetPath) &&
-                    !string.Equals(targetPath, target.Result.Document.FullFileName,
+                    !string.Equals(targetPath, target.Document.FullFileName,
                         StringComparison.OrdinalIgnoreCase)));
 
             reserved.Add(targetPath);
-            plans.Add(new RenamePlan(target, target.Result.Document.FullFileName, targetPath));
+            plans.Add(new RenamePlan(target, target.Document.FullFileName, targetPath));
         }
         return plans;
     }
 
     private static string BuildTubeFileName(TubeTarget target, int collisionSuffix)
     {
-        var tube = target.Result;
-        var size = tube.ProfileKind == TubeProfileKind.Round
-            ? $"Ø{TubeRecognitionResult.Format(tube.WidthMm)}"
-            : $"{TubeRecognitionResult.Format(tube.WidthMm)}x" +
-              $"{TubeRecognitionResult.Format(tube.HeightMm)}";
+        var tube = target.Analysis;
+        var size = tube.SectionKind == TubeSectionKind.Round
+            ? $"Ø{TubePreparationService.Format(tube.NominalWidthMm)}"
+            : $"{TubePreparationService.Format(tube.NominalWidthMm)}x" +
+              $"{TubePreparationService.Format(tube.NominalHeightMm)}";
         var quantity = Math.Max(1, target.Occurrences.Count);
-        var originalName = GetOriginalFileName(tube.Document);
+        var originalName = GetOriginalFileName(target.Document);
         var collision = collisionSuffix > 1 ? $"_{collisionSuffix}" : string.Empty;
-        var name = $"{size}x{TubeRecognitionResult.Format(tube.WallThicknessMm)}" +
+        var name = $"{size}x{TubePreparationService.Format(tube.NominalWallThicknessMm)}" +
                    $"_{originalName}_{quantity} шт{collision}";
         foreach (var invalid in IOPath.GetInvalidFileNameChars()) name = name.Replace(invalid, '_');
         return name + ".ipt";
@@ -219,14 +221,14 @@ internal sealed class RecognizeTubeCommand
         {
             if (string.Equals(plan.SourcePath, plan.TargetPath, StringComparison.OrdinalIgnoreCase))
                 continue;
-            plan.Target.Result.Document.SaveAs(plan.TargetPath, false);
+            plan.Target.Document.SaveAs(plan.TargetPath, false);
             count++;
         }
 
         if (assembly is not null) assembly.Save2(true, Type.Missing);
         else
         {
-            var part = plans.First().Target.Result.Document;
+            var part = plans.First().Target.Document;
             part.Save2(true, Type.Missing);
         }
         return count;
@@ -280,7 +282,9 @@ internal sealed class RecognizeTubeCommand
     }
 
     private sealed record TubeTarget(
-        TubeRecognitionResult Result, List<ComponentOccurrence> Occurrences);
+        PartDocument Document,
+        TubeAnalysisResult Analysis,
+        List<ComponentOccurrence> Occurrences);
 
     private sealed record RenamePlan(
         TubeTarget Target, string SourcePath, string TargetPath);
